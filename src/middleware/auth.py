@@ -1,41 +1,26 @@
-import os
-import jwt
 from functools import wraps
-from flask import request, jsonify, g
+from flask import jsonify, g
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from src.models.User import User
 
 def auth(f):
     @wraps(f)
-    def decorated_function(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        token = None
+    @jwt_required()
+    def decorated_function(*args, **kwargs):      
+
+        identity = get_jwt_identity()
+
+        user = User.query.filter_by(id=identity['id']).first()
+        if not user:
+            return jsonify({'message': 'User no longer exists'}), 401
         
-        if auth_header and auth_header.startswith('Bearer '):
-            token = auth_header.split(' ')[1]
+        g.user = {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'role': user.role
+        }
         
-        if not token:
-            return jsonify({'message': 'No token, authorization denied'}), 401
-        
-        try:
-            # Verify token + decode payload
-            decoded = jwt.decode(token, os.getenv('JWT_SECRET'), algorithms=['HS256'])
-            
-            user = User.query.filter_by(id=decoded['id']).first()
-            if not user:
-                return jsonify({'message': 'User no longer exists'}), 401
-            
-            g.user = {
-                'id': user.id,
-                'username': user.username,
-                'email': user.email,
-                'role': user.role
-            }
-            
-            return f(*args, **kwargs)
-            
-        except jwt.ExpiredSignatureError:
-            return jsonify({'message': 'Token expired'}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({'message': 'Token is not valid'}), 401
+        return f(*args, **kwargs)
     
     return decorated_function
