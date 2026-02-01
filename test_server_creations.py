@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
 """
+
+run server from backend root level:
+python -m src.main
+run this test server: 
+python test_server_creations.py
+
+
 Server Creation Endpoints Test Suite
 =====================================
 Tests all POST/creation endpoints for the Flask backend.
