@@ -1,10 +1,10 @@
 import os
+import json
 from flask import Flask, jsonify, send_from_directory
 from dotenv import load_dotenv
 from flask_jwt_extended import JWTManager
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from flask_jwt_extended import JWTManager
 from src.config.database import db, connectDB
 from src.models.User import User
 from src.models.Product import Product
@@ -30,12 +30,31 @@ def create_app():
    
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET')
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
+    
     jwt = JWTManager(app)
+
+    # Allow complex objects (dict) as JWT identity
+    @jwt.user_identity_loader
+    def user_identity_lookup(user):
+        """Convert user dict to JSON string for JWT subject"""
+        if isinstance(user, dict):
+            return json.dumps(user)
+        return str(user)
+
+    @jwt.user_lookup_loader
+    def user_lookup_callback(_jwt_header, jwt_data):
+        """Load user data from JWT - returns the identity"""
+        identity = jwt_data["sub"]
+        try:
+            return json.loads(identity)
+        except (json.JSONDecodeError, TypeError):
+            return identity
     
     limiter = Limiter(
         key_func=get_remote_address,
         app=app,
-        default_limits=["1000 per 15 minutes"] if os.getenv('NODE_ENV') == 'development' else ["100 per 15 minutes"])
+        default_limits=["1000 per 15 minutes"] if os.getenv('NODE_ENV') == 'development' else ["100 per 15 minutes"]
+    )
 
     @app.route('/uploads/<path:filename>')
     def serve_uploads(filename):
