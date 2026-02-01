@@ -2,7 +2,7 @@ from flask import Blueprint
 from src.middleware.auth import auth
 from src.middleware.checkRole import checkRole
 from src.config.constants import ROLES
-from controllers.product_controller import (
+from src.controllers.product_controller import (
     getAllProducts,
     getProductById,
     createProduct,

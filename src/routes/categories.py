@@ -2,7 +2,7 @@ from flask import Blueprint
 from src.middleware.auth import auth
 from src.middleware.checkRole import checkRole
 from src.config.constants import ROLES
-from controllers.category_controller import (
+from src.controllers.category_controller import (
     createCategory,
     getCategoryTree,
     getAllCategories,
