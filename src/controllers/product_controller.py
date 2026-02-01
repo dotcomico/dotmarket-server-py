@@ -1,4 +1,3 @@
-# Exact translation of src/controllers/productController.js
 from flask import request, jsonify
 from sqlalchemy import or_
 from src.models.Product import Product
@@ -256,7 +255,6 @@ def updateProduct(id):
         return jsonify({'message': 'Server error', 'error': str(error)}), 500
 
 def deleteProduct(id):
-    """Delete product"""
     try:
         product = Product.query.filter_by(id=id).first()
         
