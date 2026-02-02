@@ -1,3 +1,4 @@
+import json
 import re
 import bcrypt
 from flask import request, jsonify
@@ -154,17 +155,24 @@ def login():
 
 def getMe():
     try:
-        current_user = get_jwt_identity()
-        
-        # Handle both dict and direct ID formats
-        if isinstance(current_user, dict):
-            user_id = current_user['id']
-        else:
-            user_id = current_user
-            
-        user = User.query.filter_by(id=user_id).first()
+        identity = get_jwt_identity()
+        user_id = None
+
+        # parse the identity if its a JSON string
+        if isinstance(identity, str):
+            try:
+                data = json.loads(identity)
+                user_id = data.get('id')
+            except json.JSONDecodeError:
+                user_id = identity 
+        elif isinstance(identity, dict):
+            user_id = identity.get('id')
+
+        # search with integer/ID
+        user = User.query.get(user_id) 
         if not user:
             return jsonify({'message': 'User not found'}), 404
+            
         return jsonify(user.to_dict(exclude_password=True))
     except Exception as error:
         logger.error('Operation failed', {'error': str(error)})
