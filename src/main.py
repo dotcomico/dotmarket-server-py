@@ -23,9 +23,9 @@ load_dotenv()
 
 def create_app():
     app = Flask(__name__, static_folder='../public')
-    
+    app.url_map.strict_slashes = False
     PORT = int(os.getenv('PORT', 3000))
-    CORS(app)
+    CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
     connectDB(app)
    
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET')
