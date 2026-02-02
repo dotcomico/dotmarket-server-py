@@ -183,7 +183,7 @@ def deleteCategory(id):
             except Exception as e:
                 logger.warning('Failed to delete category image', {'error': str(e)})
         
-        category_name = category.nam
+        category_name = category.name
         db.session.delete(category)
         db.session.commit()
         logger.info('Category deleted', {'categoryId': id, 'name': category_name})
@@ -194,7 +194,7 @@ def deleteCategory(id):
     except Exception as error:
         logger.error('Operation failed', {'error': str(error)})
         return jsonify({'message': 'Server error', 'error': str(error)}), 500
-
+    
 def getCategoryTree():
     try:
         categories = Category.query.filter_by(parentId=None).all()
