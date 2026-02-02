@@ -1,0 +1,1107 @@
+#!/usr/bin/env python3
+"""
+=============================================================================
+🛒 SUPERMARKET DATABASE SEED FILE
+=============================================================================
+This script populates your Flask supermarket database with realistic test data.
+
+Run this AFTER deleting your existing database file.
+
+Usage:
+    cd backend
+    python seed_database.py
+
+Test Users:
+    - Admin:    admin@test.com    / password: Test123!
+    - Manager:  manager@test.com  / password: Test123!
+    - Customer: customer@test.com / password: Test123!
+=============================================================================
+"""
+
+import os
+import sys
+from datetime import datetime, timedelta
+import random
+
+# Add the backend directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from flask import Flask
+import bcrypt
+from src.config.database import db, connectDB
+from src.models.User import User
+from src.models.Category import Category
+from src.models.Product import Product
+from src.models.Order import Order
+from src.models.OrderItem import OrderItem
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+PASSWORD = "Test123!"  # Same password for all test users
+
+# =============================================================================
+# CATEGORY DATA - Realistic Supermarket Hierarchy
+# =============================================================================
+CATEGORIES = [
+    # Parent Categories (id will be assigned sequentially starting from 1)
+    {"name": "Fruits & Vegetables", "icon": "🥬", "parent": None},      # 1
+    {"name": "Meat & Poultry", "icon": "🥩", "parent": None},           # 2
+    {"name": "Fish & Seafood", "icon": "🐟", "parent": None},           # 3
+    {"name": "Dairy & Eggs", "icon": "🥛", "parent": None},             # 4
+    {"name": "Bakery", "icon": "🍞", "parent": None},                   # 5
+    {"name": "Pantry & Dry Goods", "icon": "🫙", "parent": None},       # 6
+    {"name": "Snacks & Sweets", "icon": "🍫", "parent": None},          # 7
+    {"name": "Beverages", "icon": "🥤", "parent": None},                # 8
+    {"name": "Frozen Foods", "icon": "🧊", "parent": None},             # 9
+    {"name": "Household & Cleaning", "icon": "🧹", "parent": None},     # 10
+    {"name": "Personal Care", "icon": "🧴", "parent": None},            # 11
+    {"name": "Electronics", "icon": "🔌", "parent": None},              # 12
+    
+    # Subcategories - Fruits & Vegetables (parent=1)
+    {"name": "Fresh Fruits", "icon": "🍎", "parent": 1},                # 13
+    {"name": "Fresh Vegetables", "icon": "🥕", "parent": 1},            # 14
+    {"name": "Dried Fruits & Nuts", "icon": "🥜", "parent": 1},         # 15
+    {"name": "Organic Produce", "icon": "🌿", "parent": 1},             # 16
+    
+    # Subcategories - Meat & Poultry (parent=2)
+    {"name": "Beef", "icon": "🐄", "parent": 2},                        # 17
+    {"name": "Chicken", "icon": "🐔", "parent": 2},                     # 18
+    {"name": "Pork", "icon": "🐷", "parent": 2},                        # 19
+    {"name": "Lamb", "icon": "🐑", "parent": 2},                        # 20
+    
+    # Subcategories - Fish & Seafood (parent=3)
+    {"name": "Fresh Fish", "icon": "🐠", "parent": 3},                  # 21
+    {"name": "Shellfish", "icon": "🦐", "parent": 3},                   # 22
+    {"name": "Smoked & Cured", "icon": "🐟", "parent": 3},              # 23
+    
+    # Subcategories - Dairy & Eggs (parent=4)
+    {"name": "Milk & Cream", "icon": "🥛", "parent": 4},                # 24
+    {"name": "Cheese", "icon": "🧀", "parent": 4},                      # 25
+    {"name": "Yogurt", "icon": "🥣", "parent": 4},                      # 26
+    {"name": "Eggs", "icon": "🥚", "parent": 4},                        # 27
+    {"name": "Butter & Margarine", "icon": "🧈", "parent": 4},          # 28
+    
+    # Subcategories - Bakery (parent=5)
+    {"name": "Bread & Rolls", "icon": "🍞", "parent": 5},               # 29
+    {"name": "Pastries & Cakes", "icon": "🥐", "parent": 5},            # 30
+    {"name": "Cookies & Biscuits", "icon": "🍪", "parent": 5},          # 31
+    
+    # Subcategories - Pantry & Dry Goods (parent=6)
+    {"name": "Rice & Grains", "icon": "🍚", "parent": 6},               # 32
+    {"name": "Pasta & Noodles", "icon": "🍝", "parent": 6},             # 33
+    {"name": "Canned Goods", "icon": "🥫", "parent": 6},                # 34
+    {"name": "Oils & Vinegars", "icon": "🫒", "parent": 6},             # 35
+    {"name": "Spices & Seasonings", "icon": "🌶️", "parent": 6},         # 36
+    {"name": "Breakfast & Cereals", "icon": "🥣", "parent": 6},         # 37
+    
+    # Subcategories - Snacks & Sweets (parent=7)
+    {"name": "Chips & Crisps", "icon": "🍟", "parent": 7},              # 38
+    {"name": "Candy & Chocolate", "icon": "🍬", "parent": 7},           # 39
+    {"name": "Nuts & Seeds", "icon": "🥜", "parent": 7},                # 40
+    {"name": "Ice Cream", "icon": "🍦", "parent": 7},                   # 41
+    
+    # Subcategories - Beverages (parent=8)
+    {"name": "Water & Sparkling", "icon": "💧", "parent": 8},           # 42
+    {"name": "Soft Drinks", "icon": "🥤", "parent": 8},                 # 43
+    {"name": "Juices", "icon": "🧃", "parent": 8},                      # 44
+    {"name": "Coffee & Tea", "icon": "☕", "parent": 8},                # 45
+    {"name": "Energy Drinks", "icon": "⚡", "parent": 8},               # 46
+    
+    # Subcategories - Frozen Foods (parent=9)
+    {"name": "Frozen Vegetables", "icon": "🥦", "parent": 9},           # 47
+    {"name": "Frozen Meals", "icon": "🍱", "parent": 9},                # 48
+    {"name": "Frozen Pizza", "icon": "🍕", "parent": 9},                # 49
+    {"name": "Frozen Desserts", "icon": "🍨", "parent": 9},             # 50
+    
+    # Subcategories - Household & Cleaning (parent=10)
+    {"name": "Laundry", "icon": "🧺", "parent": 10},                    # 51
+    {"name": "Dish Care", "icon": "🍽️", "parent": 10},                  # 52
+    {"name": "Surface Cleaners", "icon": "🧽", "parent": 10},           # 53
+    {"name": "Paper Products", "icon": "🧻", "parent": 10},             # 54
+    
+    # Subcategories - Personal Care (parent=11)
+    {"name": "Body Care", "icon": "🛁", "parent": 11},                  # 55
+    {"name": "Hair Care", "icon": "💇", "parent": 11},                  # 56
+    {"name": "Oral Care", "icon": "🦷", "parent": 11},                  # 57
+    
+    # Subcategories - Electronics (parent=12)
+    {"name": "Smart Devices", "icon": "📱", "parent": 12},              # 58
+    {"name": "Audio", "icon": "🎧", "parent": 12},                      # 59
+    {"name": "Cameras & Accessories", "icon": "📷", "parent": 12},      # 60
+]
+
+# =============================================================================
+# PRODUCT DATA - From Old DB + New Products
+# =============================================================================
+PRODUCTS = [
+    # === FROM OLD DATABASE (with images) ===
+    {
+        "name": "Apple",
+        "description": "Fresh apples are crisp, juicy, and nutritious fruits, with popular varieties including Honeycrisp, Gala, Fuji, Pink Lady, and Granny Smith. They are a great source of fiber, vitamin C, and antioxidants like quercetin.",
+        "price": 2.99,
+        "stock": 150,
+        "categoryId": 13,  # Fresh Fruits
+        "image": "/uploads/1769813340619.png",
+        "image360": "/uploads/1769813340627.gif"
+    },
+    {
+        "name": "Banana",
+        "description": "The best bananas from Africa. Sweet, creamy, and packed with potassium. Perfect for smoothies, baking, or as a healthy snack.",
+        "price": 1.49,
+        "stock": 200,
+        "categoryId": 13,  # Fresh Fruits
+        "image": "/uploads/1769468094211.png",
+        "image360": "/uploads/1769881778440.gif"
+    },
+    {
+        "name": "Peanut Butter - Nuttie's Creamy",
+        "description": "Smooth creamy Peanut Butter made from premium roasted peanuts. No added sugar, no palm oil. Perfect for sandwiches and baking.",
+        "price": 6.99,
+        "stock": 85,
+        "categoryId": 40,  # Nuts & Seeds
+        "image": "/uploads/1769468730141.png",
+        "image360": "/uploads/1769881503508.gif"
+    },
+    {
+        "name": "Coffee Beans - Explorer's Blend",
+        "description": "High-altitude Arabica beans with notes of dark chocolate and toasted hazelnuts. Medium-Dark Roast, roasted in small batches for peak freshness.",
+        "price": 14.99,
+        "stock": 75,
+        "categoryId": 45,  # Coffee & Tea
+        "image": "/uploads/1769469144089.png",
+        "image360": "/uploads/1769881853355.gif"
+    },
+    {
+        "name": "Evergreen Elixir - Cold-Pressed Green Juice",
+        "description": "A refreshing blend of kale, spinach, green apple, and ginger. No added sugar, just pure liquid vitality.",
+        "price": 6.00,
+        "stock": 45,
+        "categoryId": 44,  # Juices
+        "image": "/uploads/1769469221098.png",
+        "image360": "/uploads/1769881897325.gif"
+    },
+    {
+        "name": "Laundry Detergent - Ocean Fresh Ultra Clean",
+        "description": "A powerful, eco-friendly detergent that removes tough stains while leaving your clothes with a crisp, sea-breeze scent.",
+        "price": 12.50,
+        "stock": 120,
+        "categoryId": 51,  # Laundry
+        "image": "/uploads/1769469285745.png",
+        "image360": "/uploads/1769882129873.gif"
+    },
+    {
+        "name": "Sunrise Granola - Honey & Walnut Clusters",
+        "description": "Crunchy toasted oats glazed with organic honey and tossed with premium walnut halves and cinnamon.",
+        "price": 8.95,
+        "stock": 60,
+        "categoryId": 37,  # Breakfast & Cereals
+        "image": "/uploads/1769469355038.png",
+        "image360": "/uploads/1769882168627.gif"
+    },
+    {
+        "name": "Citrus Spark - Natural Dish Soap",
+        "description": "A grease-cutting formula powered by eucalyptus and lemongrass essential oils. Gentle on hands, tough on grime.",
+        "price": 5.25,
+        "stock": 200,
+        "categoryId": 52,  # Dish Care
+        "image": "/uploads/1769469417061.png",
+        "image360": "/uploads/1769882193837.gif"
+    },
+    {
+        "name": "Ice Cream - Moonlight Swirl Lavender Honeycomb",
+        "description": "Gourmet lavender-infused cream with crunchy honeycomb bits and a golden honey swirl. A dream in every scoop.",
+        "price": 7.50,
+        "stock": 35,
+        "categoryId": 41,  # Ice Cream
+        "image": "/uploads/1769469478987.png",
+        "image360": "/uploads/1769882207898.gif"
+    },
+    {
+        "name": "Oro Verde Extra Virgin Olive Oil",
+        "description": "Cold-pressed from early-harvest Koroneiki olives. Features a peppery finish and a vibrant, grassy aroma.",
+        "price": 19.00,
+        "stock": 90,
+        "categoryId": 35,  # Oils & Vinegars
+        "image": "/uploads/1769469537576.png",
+        "image360": "/uploads/1769882253787.gif"
+    },
+    {
+        "name": "Botanical Bliss - Handmade Soap Bar",
+        "description": "An artisanal soap bar crafted with lavender, sage, and exfoliating oats for a calming and skin-softening wash.",
+        "price": 6.50,
+        "stock": 150,
+        "categoryId": 55,  # Body Care
+        "image": "/uploads/1769469606814.png",
+        "image360": "/uploads/1769881527403.gif"
+    },
+    {
+        "name": "Premium Black Angus Ribeye Steak",
+        "description": "A thick, hand-cut ribeye steak featuring exceptional marbling for a buttery texture and rich flavor. Perfect for grilling or pan-searing.",
+        "price": 24.99,
+        "stock": 25,
+        "categoryId": 17,  # Beef
+        "image": "/uploads/1769470050305.png",
+        "image360": "/uploads/1769881632587.gif"
+    },
+    {
+        "name": "Horizon Smart Hub & Speaker",
+        "description": "A sleek, voice-controlled smart home assistant with a vibrant circular display. Manages your schedule, music, and smart devices with ease.",
+        "price": 129.00,
+        "stock": 15,
+        "categoryId": 58,  # Smart Devices
+        "image": "/uploads/1769470111007.png",
+        "image360": "/uploads/1769881790205.gif"
+    },
+    {
+        "name": "Titan X Wireless Charging Stand",
+        "description": "A high-speed 15W wireless charger with a minimalist aluminum design. Keeps your phone upright at the perfect viewing angle while charging.",
+        "price": 45.00,
+        "stock": 50,
+        "categoryId": 58,  # Smart Devices
+        "image": "/uploads/1769470155472.png",
+        "image360": "/uploads/1769881802554.gif"
+    },
+    {
+        "name": "Pulse Pro Fitness Smartwatch",
+        "description": "Tracks heart rate, sleep quality, and over 50 workout types. Features a curved AMOLED display and a 10-day battery life.",
+        "price": 199.00,
+        "stock": 30,
+        "categoryId": 58,  # Smart Devices
+        "image": "/uploads/1769470190198.png",
+        "image360": "/uploads/1769881816325.gif"
+    },
+    {
+        "name": "NeoPodz Noise-Canceling Earbuds",
+        "description": "True wireless earbuds with active noise cancellation and a smart charging case that displays battery life and time.",
+        "price": 149.00,
+        "stock": 40,
+        "categoryId": 59,  # Audio
+        "image": "/uploads/1769470228332.png",
+        "image360": "/uploads/1769881829037.gif"
+    },
+    {
+        "name": "VisionX VR Pro Headset",
+        "description": "Immersive 4K virtual reality headset with built-in spatial audio and ergonomic head straps for long gaming sessions.",
+        "price": 499.00,
+        "stock": 8,
+        "categoryId": 58,  # Smart Devices
+        "image": "/uploads/1769470283202.png",
+        "image360": "/uploads/1769871476128.gif"
+    },
+    {
+        "name": "Lumix SLR Digital Camera (Professional Bundle)",
+        "description": "High-resolution DSLR camera with a 24.2MP sensor, including a 24-70mm lens and a high-speed 128GB memory card.",
+        "price": 1250.00,
+        "stock": 3,  # LOW STOCK - for dashboard testing
+        "categoryId": 60,  # Cameras & Accessories
+        "image": "/uploads/1769470326740.png",
+        "image360": "/uploads/1769871463277.gif"
+    },
+    {
+        "name": "Mushroom Savory Pastry",
+        "description": "A flaky, golden-brown puff pastry filled with a savory blend of sautéed forest mushrooms, caramelized onions, and a touch of black pepper.",
+        "price": 2.50,
+        "stock": 80,
+        "categoryId": 30,  # Pastries & Cakes
+        "image": "/uploads/1769871423513.png",
+        "image360": "/uploads/1769871423542.gif"
+    },
+    {
+        "name": "Fresh Atlantic Salmon Fillet",
+        "description": "Premium, skin-on Atlantic salmon known for its vibrant color and rich, buttery texture. High in Omega-3 fatty acids and perfect for pan-searing or roasting.",
+        "price": 14.99,
+        "stock": 45,
+        "categoryId": 21,  # Fresh Fish
+        "image": "/uploads/1769896297733.png",
+        "image360": "/uploads/1769896297759.gif"
+    },
+    
+    # === NEW PRODUCTS (No images - system will use placeholders) ===
+    # Fresh Vegetables (14)
+    {
+        "name": "Organic Carrots (1lb)",
+        "description": "Sweet, crunchy organic carrots. Perfect for snacking, cooking, or juicing.",
+        "price": 2.49,
+        "stock": 120,
+        "categoryId": 14,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Fresh Broccoli",
+        "description": "Vibrant green broccoli florets, packed with vitamins and fiber.",
+        "price": 2.99,
+        "stock": 80,
+        "categoryId": 14,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Red Bell Peppers (3-pack)",
+        "description": "Sweet, crisp red bell peppers. Great for salads, stir-fries, or stuffing.",
+        "price": 4.99,
+        "stock": 5,  # LOW STOCK
+        "categoryId": 14,
+        "image": None,
+        "image360": None
+    },
+    
+    # Dried Fruits & Nuts (15)
+    {
+        "name": "Roasted Almonds (12oz)",
+        "description": "Lightly salted roasted almonds. A protein-rich snack.",
+        "price": 8.99,
+        "stock": 65,
+        "categoryId": 15,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Dried Mango Slices",
+        "description": "No sugar added dried mango slices. Tropical sweetness in every bite.",
+        "price": 5.99,
+        "stock": 40,
+        "categoryId": 15,
+        "image": None,
+        "image360": None
+    },
+    
+    # Chicken (18)
+    {
+        "name": "Free-Range Chicken Breast (2-pack)",
+        "description": "Boneless, skinless chicken breasts from free-range chickens. Lean and versatile.",
+        "price": 12.99,
+        "stock": 55,
+        "categoryId": 18,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Organic Whole Chicken",
+        "description": "Whole organic chicken, perfect for roasting. Approximately 4-5 lbs.",
+        "price": 18.99,
+        "stock": 20,
+        "categoryId": 18,
+        "image": None,
+        "image360": None
+    },
+    
+    # Shellfish (22)
+    {
+        "name": "Jumbo Shrimp (1lb)",
+        "description": "Wild-caught jumbo shrimp, peeled and deveined. Ready to cook.",
+        "price": 16.99,
+        "stock": 30,
+        "categoryId": 22,
+        "image": None,
+        "image360": None
+    },
+    
+    # Milk & Cream (24)
+    {
+        "name": "Whole Milk (1 Gallon)",
+        "description": "Farm-fresh whole milk. Rich, creamy, and perfect for the whole family.",
+        "price": 4.49,
+        "stock": 100,
+        "categoryId": 24,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Heavy Whipping Cream",
+        "description": "Ultra-pasteurized heavy cream for whipping, cooking, and baking.",
+        "price": 5.99,
+        "stock": 45,
+        "categoryId": 24,
+        "image": None,
+        "image360": None
+    },
+    
+    # Cheese (25)
+    {
+        "name": "Aged Cheddar Cheese Block",
+        "description": "Sharp, aged cheddar with complex flavor. Aged 12 months.",
+        "price": 7.99,
+        "stock": 60,
+        "categoryId": 25,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Fresh Mozzarella Ball",
+        "description": "Creamy Italian mozzarella, perfect for caprese salad or pizza.",
+        "price": 6.49,
+        "stock": 35,
+        "categoryId": 25,
+        "image": None,
+        "image360": None
+    },
+    
+    # Yogurt (26)
+    {
+        "name": "Greek Yogurt - Plain (32oz)",
+        "description": "Thick, protein-rich Greek yogurt. No added sugar.",
+        "price": 5.99,
+        "stock": 80,
+        "categoryId": 26,
+        "image": None,
+        "image360": None
+    },
+    
+    # Eggs (27)
+    {
+        "name": "Free-Range Large Eggs (12-pack)",
+        "description": "Farm-fresh free-range eggs. Rich golden yolks.",
+        "price": 5.99,
+        "stock": 150,
+        "categoryId": 27,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Organic Brown Eggs (18-pack)",
+        "description": "Certified organic brown eggs from pasture-raised hens.",
+        "price": 8.99,
+        "stock": 2,  # LOW STOCK
+        "categoryId": 27,
+        "image": None,
+        "image360": None
+    },
+    
+    # Bread & Rolls (29)
+    {
+        "name": "Artisan Sourdough Loaf",
+        "description": "Crusty sourdough bread with a tangy flavor and chewy crumb. Baked fresh daily.",
+        "price": 5.99,
+        "stock": 40,
+        "categoryId": 29,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Whole Wheat Sandwich Bread",
+        "description": "100% whole wheat bread with no artificial preservatives.",
+        "price": 3.99,
+        "stock": 75,
+        "categoryId": 29,
+        "image": None,
+        "image360": None
+    },
+    
+    # Pastries & Cakes (30)
+    {
+        "name": "Butter Croissant (4-pack)",
+        "description": "Flaky, buttery French croissants. Perfect for breakfast.",
+        "price": 6.99,
+        "stock": 25,
+        "categoryId": 30,
+        "image": None,
+        "image360": None
+    },
+    
+    # Rice & Grains (32)
+    {
+        "name": "Basmati Rice (2lb)",
+        "description": "Premium aged basmati rice with a delicate aroma and fluffy texture.",
+        "price": 6.99,
+        "stock": 90,
+        "categoryId": 32,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Organic Quinoa",
+        "description": "Pre-washed organic quinoa. High protein, gluten-free superfood.",
+        "price": 7.99,
+        "stock": 55,
+        "categoryId": 32,
+        "image": None,
+        "image360": None
+    },
+    
+    # Pasta & Noodles (33)
+    {
+        "name": "Italian Spaghetti",
+        "description": "Traditional bronze-cut spaghetti made from durum wheat semolina.",
+        "price": 2.99,
+        "stock": 200,
+        "categoryId": 33,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Penne Rigate",
+        "description": "Ridged penne pasta, perfect for holding chunky sauces.",
+        "price": 2.99,
+        "stock": 180,
+        "categoryId": 33,
+        "image": None,
+        "image360": None
+    },
+    
+    # Canned Goods (34)
+    {
+        "name": "San Marzano Tomatoes",
+        "description": "Imported Italian whole peeled tomatoes. The gold standard for pasta sauce.",
+        "price": 4.99,
+        "stock": 120,
+        "categoryId": 34,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Organic Black Beans",
+        "description": "Ready-to-use organic black beans. Low sodium.",
+        "price": 2.49,
+        "stock": 150,
+        "categoryId": 34,
+        "image": None,
+        "image360": None
+    },
+    
+    # Chips & Crisps (38)
+    {
+        "name": "Sea Salt Kettle Chips",
+        "description": "Crunchy kettle-cooked potato chips with sea salt.",
+        "price": 4.49,
+        "stock": 100,
+        "categoryId": 38,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Organic Tortilla Chips",
+        "description": "Stone-ground organic corn tortilla chips. Perfect with salsa.",
+        "price": 3.99,
+        "stock": 85,
+        "categoryId": 38,
+        "image": None,
+        "image360": None
+    },
+    
+    # Candy & Chocolate (39)
+    {
+        "name": "Dark Chocolate Bar (72% Cacao)",
+        "description": "Premium Belgian dark chocolate. Rich, intense flavor.",
+        "price": 4.99,
+        "stock": 70,
+        "categoryId": 39,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Gummy Bears (1lb)",
+        "description": "Classic fruit-flavored gummy bears. A nostalgic treat.",
+        "price": 5.99,
+        "stock": 60,
+        "categoryId": 39,
+        "image": None,
+        "image360": None
+    },
+    
+    # Water & Sparkling (42)
+    {
+        "name": "Spring Water (24-pack)",
+        "description": "Natural spring water from mountain sources. 16.9oz bottles.",
+        "price": 5.99,
+        "stock": 200,
+        "categoryId": 42,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Sparkling Water Variety Pack",
+        "description": "Assorted fruit-flavored sparkling water. No sugar, no calories.",
+        "price": 7.99,
+        "stock": 150,
+        "categoryId": 42,
+        "image": None,
+        "image360": None
+    },
+    
+    # Soft Drinks (43)
+    {
+        "name": "Cola Classic (12-pack)",
+        "description": "Classic cola in 12oz cans. Refreshing and iconic.",
+        "price": 6.99,
+        "stock": 180,
+        "categoryId": 43,
+        "image": None,
+        "image360": None
+    },
+    
+    # Energy Drinks (46)
+    {
+        "name": "Energy Boost - Original (4-pack)",
+        "description": "Energy drink with caffeine, B-vitamins, and taurine.",
+        "price": 8.99,
+        "stock": 0,  # OUT OF STOCK
+        "categoryId": 46,
+        "image": None,
+        "image360": None
+    },
+    
+    # Frozen Vegetables (47)
+    {
+        "name": "Frozen Mixed Vegetables",
+        "description": "A blend of peas, carrots, corn, and green beans. Flash-frozen for freshness.",
+        "price": 3.49,
+        "stock": 90,
+        "categoryId": 47,
+        "image": None,
+        "image360": None
+    },
+    
+    # Frozen Pizza (49)
+    {
+        "name": "Margherita Pizza",
+        "description": "Stone-baked pizza with tomato sauce, mozzarella, and fresh basil.",
+        "price": 8.99,
+        "stock": 45,
+        "categoryId": 49,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Pepperoni Pizza",
+        "description": "Classic pepperoni pizza with extra cheese. Family size.",
+        "price": 9.99,
+        "stock": 50,
+        "categoryId": 49,
+        "image": None,
+        "image360": None
+    },
+    
+    # Surface Cleaners (53)
+    {
+        "name": "All-Purpose Cleaner Spray",
+        "description": "Multi-surface cleaner that cuts through grease and grime. Fresh lemon scent.",
+        "price": 4.99,
+        "stock": 110,
+        "categoryId": 53,
+        "image": None,
+        "image360": None
+    },
+    
+    # Paper Products (54)
+    {
+        "name": "Paper Towels (6-roll pack)",
+        "description": "Super absorbent paper towels. 2-ply, select-a-size sheets.",
+        "price": 9.99,
+        "stock": 75,
+        "categoryId": 54,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Toilet Paper (12-pack)",
+        "description": "Soft, strong 2-ply toilet paper. Septic-safe.",
+        "price": 12.99,
+        "stock": 4,  # LOW STOCK
+        "categoryId": 54,
+        "image": None,
+        "image360": None
+    },
+    
+    # Hair Care (56)
+    {
+        "name": "Moisturizing Shampoo",
+        "description": "Gentle daily shampoo with argan oil for soft, shiny hair.",
+        "price": 8.99,
+        "stock": 65,
+        "categoryId": 56,
+        "image": None,
+        "image360": None
+    },
+    {
+        "name": "Conditioner - Deep Repair",
+        "description": "Intensive conditioner for damaged hair. With keratin protein.",
+        "price": 9.99,
+        "stock": 55,
+        "categoryId": 56,
+        "image": None,
+        "image360": None
+    },
+    
+    # Oral Care (57)
+    {
+        "name": "Whitening Toothpaste",
+        "description": "Fluoride toothpaste that whitens teeth and freshens breath.",
+        "price": 4.99,
+        "stock": 120,
+        "categoryId": 57,
+        "image": None,
+        "image360": None
+    },
+]
+
+# =============================================================================
+# USER DATA
+# =============================================================================
+USERS = [
+    {
+        "username": "AdminTest",
+        "email": "admin@test.com",
+        "role": "admin"
+    },
+    {
+        "username": "ManagerTest",
+        "email": "manager@test.com",
+        "role": "manager"
+    },
+    {
+        "username": "CustomerTest",
+        "email": "customer@test.com",
+        "role": "customer"
+    },
+]
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+
+def create_app_for_seed():
+    """Create a minimal Flask app for database seeding."""
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    # 1. חישוב הנתיב האבסולוטי לתיקייה שבה אנחנו נמצאים כרגע (root)
+    base_dir = os.path.abspath(os.path.dirname(__file__))
+    
+    # 2. הגדרת הנתיב המדויק ל-src/instance
+    instance_path = os.path.join(base_dir, 'src', 'instance')
+    
+    # יצירת התיקייה אם היא לא קיימת
+    if not os.path.exists(instance_path):
+        os.makedirs(instance_path, exist_ok=True)
+
+    # 3. יצירת האפליקציה תוך הגדרה מפורשת של ה-instance_path
+    # זה מונע מ-Flask לנחש איפה לשים דברים
+    app = Flask(__name__, instance_path=instance_path)
+    
+    # 4. בניית הנתיב לקובץ הדאטהבייס
+    db_file_path = os.path.join(instance_path, 'database.sqlite')
+    
+    # --- תיקון קריטי ל-Windows ---
+    # מחליף backslash (\) ב-forward slash (/) כדי ש-SQLAlchemy יקרא את זה נכון
+    db_file_path = db_file_path.replace('\\', '/')
+    
+    # 5. הגדרת ה-URI הסופי
+    # שים לב לשימוש ב-3 סלשים (///) לנתיב אבסולוטי
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_file_path}'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    
+    print(f"📍 Database path forced to: {app.config['SQLALCHEMY_DATABASE_URI']}")
+    
+    connectDB(app)
+    return app
+
+def clear_database():
+    """Clear all tables in the correct order to respect foreign keys."""
+    print("🗑️  Creating tables (if needed)...")
+    db.create_all()
+    
+    print("🗑️  Clearing existing data...")
+    OrderItem.query.delete()
+    Order.query.delete()
+    Product.query.delete()
+    Category.query.delete()
+    User.query.delete()
+    db.session.commit()
+    print("✅ Database cleared")
+
+def seed_users():
+    """Create test users with hashed passwords."""
+    print("\n👤 Creating users...")
+    users_map = {}
+    
+    # Hash password using bcrypt (same as your auth_controller)
+    salt = bcrypt.gensalt(rounds=10)
+    hashed_password = bcrypt.hashpw(PASSWORD.encode('utf-8'), salt).decode('utf-8')
+    
+    for user_data in USERS:
+        user = User(
+            username=user_data["username"],
+            email=user_data["email"],
+            password=hashed_password,
+            role=user_data["role"]
+        )
+        db.session.add(user)
+        db.session.flush()  # Get the ID
+        users_map[user_data["role"]] = user
+        print(f"   ✅ Created {user_data['role']}: {user_data['email']}")
+    
+    db.session.commit()
+    return users_map
+
+def seed_categories():
+    """Create category hierarchy."""
+    print("\n📁 Creating categories...")
+    category_map = {}
+    
+    for i, cat_data in enumerate(CATEGORIES, start=1):
+        category = Category(
+            name=cat_data["name"],
+            icon=cat_data["icon"],
+            parentId=cat_data["parent"]
+        )
+        db.session.add(category)
+        db.session.flush()
+        category_map[i] = category
+    
+    db.session.commit()
+    
+    # Count parents and children
+    parents = len([c for c in CATEGORIES if c["parent"] is None])
+    children = len([c for c in CATEGORIES if c["parent"] is not None])
+    print(f"   ✅ Created {parents} parent categories")
+    print(f"   ✅ Created {children} subcategories")
+    
+    return category_map
+
+def seed_products():
+    """Create products with various stock levels."""
+    print("\n📦 Creating products...")
+    product_list = []
+    
+    for prod_data in PRODUCTS:
+        product = Product(
+            name=prod_data["name"],
+            description=prod_data["description"],
+            price=prod_data["price"],
+            stock=prod_data["stock"],
+            categoryId=prod_data["categoryId"],
+            image=prod_data.get("image"),
+            image360=prod_data.get("image360")
+        )
+        db.session.add(product)
+        db.session.flush()
+        product_list.append(product)
+    
+    db.session.commit()
+    
+    # Stats
+    total = len(product_list)
+    with_images = len([p for p in PRODUCTS if p.get("image")])
+    low_stock = len([p for p in PRODUCTS if 0 < p["stock"] <= 5])
+    out_of_stock = len([p for p in PRODUCTS if p["stock"] == 0])
+    
+    print(f"   ✅ Created {total} products")
+    print(f"   📸 {with_images} with images")
+    print(f"   ⚠️  {low_stock} with low stock (≤5)")
+    print(f"   ❌ {out_of_stock} out of stock")
+    
+    return product_list
+
+def seed_orders(users_map, products):
+    """Create sample orders with various statuses."""
+    print("\n🛒 Creating orders...")
+    
+    customer = users_map["customer"]
+    
+    # Helper to get random products
+    available_products = [p for p in products if p.stock > 0]
+    
+    # Order 1: Completed/Shipped order (past)
+    order1 = Order(
+        totalAmount=0,
+        status="shipped",
+        address="John Doe, 123 Main Street\nApt 4B, New York, NY 10001, Phone: 555-0123",
+        UserId=customer.id
+    )
+    db.session.add(order1)
+    db.session.flush()
+    
+    # Add items to order 1
+    order1_items = [
+        {"product": products[0], "quantity": 3},   # Apple
+        {"product": products[1], "quantity": 2},   # Banana
+        {"product": products[6], "quantity": 1},   # Granola
+    ]
+    total1 = 0
+    for item in order1_items:
+        price = item["product"].price
+        oi = OrderItem(
+            OrderId=order1.id,
+            ProductId=item["product"].id,
+            quantity=item["quantity"],
+            priceAtPurchase=price
+        )
+        total1 += price * item["quantity"]
+        db.session.add(oi)
+    order1.totalAmount = round(total1, 2)
+    
+    # Order 2: Paid order (processing)
+    order2 = Order(
+        totalAmount=0,
+        status="paid",
+        address="John Doe, 123 Main Street\nApt 4B, New York, NY 10001, Phone: 555-0123",
+        UserId=customer.id
+    )
+    db.session.add(order2)
+    db.session.flush()
+    
+    order2_items = [
+        {"product": products[11], "quantity": 1},  # Ribeye Steak
+        {"product": products[9], "quantity": 1},   # Olive Oil
+        {"product": products[19], "quantity": 1},  # Salmon
+    ]
+    total2 = 0
+    for item in order2_items:
+        price = item["product"].price
+        oi = OrderItem(
+            OrderId=order2.id,
+            ProductId=item["product"].id,
+            quantity=item["quantity"],
+            priceAtPurchase=price
+        )
+        total2 += price * item["quantity"]
+        db.session.add(oi)
+    order2.totalAmount = round(total2, 2)
+    
+    # Order 3: Pending order (new)
+    order3 = Order(
+        totalAmount=0,
+        status="pending",
+        address="John Doe, 123 Main Street\nApt 4B, New York, NY 10001, Phone: 555-0123",
+        UserId=customer.id
+    )
+    db.session.add(order3)
+    db.session.flush()
+    
+    order3_items = [
+        {"product": products[12], "quantity": 1},  # Smart Hub
+        {"product": products[15], "quantity": 1},  # Earbuds
+    ]
+    total3 = 0
+    for item in order3_items:
+        price = item["product"].price
+        oi = OrderItem(
+            OrderId=order3.id,
+            ProductId=item["product"].id,
+            quantity=item["quantity"],
+            priceAtPurchase=price
+        )
+        total3 += price * item["quantity"]
+        db.session.add(oi)
+    order3.totalAmount = round(total3, 2)
+    
+    # Order 4: Cancelled order
+    order4 = Order(
+        totalAmount=0,
+        status="cancelled",
+        address="John Doe, 456 Oak Avenue\nSuite 100, Los Angeles, CA 90001, Phone: 555-0456",
+        UserId=customer.id
+    )
+    db.session.add(order4)
+    db.session.flush()
+    
+    order4_items = [
+        {"product": products[16], "quantity": 1},  # VR Headset
+    ]
+    total4 = 0
+    for item in order4_items:
+        price = item["product"].price
+        oi = OrderItem(
+            OrderId=order4.id,
+            ProductId=item["product"].id,
+            quantity=item["quantity"],
+            priceAtPurchase=price
+        )
+        total4 += price * item["quantity"]
+        db.session.add(oi)
+    order4.totalAmount = round(total4, 2)
+    
+    # Order 5: Another shipped order (variety)
+    order5 = Order(
+        totalAmount=0,
+        status="shipped",
+        address="John Doe, 789 Elm Street\nFloor 2, Chicago, IL 60601, Phone: 555-0789",
+        UserId=customer.id
+    )
+    db.session.add(order5)
+    db.session.flush()
+    
+    order5_items = [
+        {"product": products[5], "quantity": 2},   # Laundry Detergent
+        {"product": products[7], "quantity": 3},   # Dish Soap
+        {"product": products[10], "quantity": 2},  # Soap Bar
+    ]
+    total5 = 0
+    for item in order5_items:
+        price = item["product"].price
+        oi = OrderItem(
+            OrderId=order5.id,
+            ProductId=item["product"].id,
+            quantity=item["quantity"],
+            priceAtPurchase=price
+        )
+        total5 += price * item["quantity"]
+        db.session.add(oi)
+    order5.totalAmount = round(total5, 2)
+    
+    db.session.commit()
+    
+    print(f"   ✅ Created 5 orders:")
+    print(f"      - 2 shipped")
+    print(f"      - 1 paid (processing)")
+    print(f"      - 1 pending")
+    print(f"      - 1 cancelled")
+
+def print_summary():
+    """Print final summary with login credentials."""
+    print("\n" + "=" * 60)
+    print("🎉 DATABASE SEEDED SUCCESSFULLY!")
+    print("=" * 60)
+    print("\n📊 Summary:")
+    print(f"   • Categories: {Category.query.count()}")
+    print(f"   • Products: {Product.query.count()}")
+    print(f"   • Users: {User.query.count()}")
+    print(f"   • Orders: {Order.query.count()}")
+    
+    print("\n🔐 Test User Credentials:")
+    print("   ┌─────────────────────────────────────────────────┐")
+    print("   │ Role      │ Email              │ Password       │")
+    print("   ├─────────────────────────────────────────────────┤")
+    print("   │ Admin     │ admin@test.com     │ Test123!       │")
+    print("   │ Manager   │ manager@test.com   │ Test123!       │")
+    print("   │ Customer  │ customer@test.com  │ Test123!       │")
+    print("   └─────────────────────────────────────────────────┘")
+    
+    print("\n⚠️  Dashboard Test Scenarios:")
+    print("   • Low stock products: Check Products page for items with stock ≤ 5")
+    print("   • Out of stock: At least 1 product with 0 stock")
+    print("   • Order statuses: pending, paid, shipped, cancelled")
+    print("   • Customer orders: 5 orders with various items")
+    
+    print("\n🚀 Start your server with: python -m src.main")
+    print("=" * 60)
+
+# =============================================================================
+# MAIN EXECUTION
+# =============================================================================
+
+def main():
+    """Main seeding function."""
+    print("=" * 60)
+    print("🌱 SUPERMARKET DATABASE SEEDER")
+    print("=" * 60)
+    
+    app = create_app_for_seed()
+    
+    with app.app_context():
+        # Clear existing data
+        clear_database()
+        
+        # Seed in order
+        users_map = seed_users()
+        seed_categories()
+        products = seed_products()
+        seed_orders(users_map, products)
+        
+        # Print summary
+        print_summary()
+
+if __name__ == "__main__":
+    main()
