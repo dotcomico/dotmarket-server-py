@@ -2,15 +2,17 @@
 
 Flask REST API for the Supermarket e-commerce application.
 
-## 🚀 Quick Start
+## 🐳 Docker Hub
 
-### Run with Docker
+**https://hub.docker.com/r/dotcoms/supermarket-backend**
+
 ```bash
 docker pull dotcoms/supermarket-backend:latest
 docker run -p 3000:3000 dotcoms/supermarket-backend:latest
 ```
 
-### Run Locally
+## 🚀 Quick Start (Local)
+
 ```bash
 cd backend-py
 python -m venv venv
@@ -91,16 +93,6 @@ backend-py/
 ├── public/uploads/    # Product images
 ├── requirements.txt
 └── seed_database.py
-```
-
-## 🐳 Docker
-
-```bash
-# Build
-docker build -t supermarket-backend .
-
-# Run
-docker run -p 3000:3000 -e JWT_SECRET=your_secret supermarket-backend
 ```
 
 ## ⚙️ Environment Variables
