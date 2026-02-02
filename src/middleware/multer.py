@@ -14,7 +14,7 @@ def allowed_file(filename):
     return ext in ALLOWED_EXTENSIONS
 
 def save_uploaded_file(file, subfolder=''):
-    #save with unique name
+    # unique name
     if not file or file.filename == '':
         return None
     
@@ -29,7 +29,7 @@ def save_uploaded_file(file, subfolder=''):
     if size > MAX_FILE_SIZE:
         raise ValueError('File size exceeds 5MB limit!')
     
-    # Create upload directory if it doesn't exist
+    # create directory 
     upload_path = os.path.join(UPLOAD_FOLDER, subfolder) if subfolder else UPLOAD_FOLDER
     os.makedirs(upload_path, exist_ok=True)
     
@@ -40,10 +40,29 @@ def save_uploaded_file(file, subfolder=''):
     filepath = os.path.join(upload_path, filename)
     file.save(filepath)
     
-    # Return path for database storage
+    # get path
     if subfolder:
         return f'/uploads/{subfolder}/{filename}'
     return f'/uploads/{filename}'
 
 def get_upload_folder():
     return UPLOAD_FOLDER
+
+def delete_uploaded_file(file_url):
+    if not file_url:
+        return False
+
+    relative_path = file_url.lstrip('/')
+    base_dir = os.path.dirname(UPLOAD_FOLDER.rstrip('/'))
+    full_path = os.path.join(base_dir, relative_path)
+
+    try:
+        if os.path.exists(full_path):
+            os.remove(full_path)
+            return True
+        else:
+            print(f"File not found: {full_path}")
+            return False
+    except Exception as e:
+        print(f"Error deleting file: {e}")
+        return False
