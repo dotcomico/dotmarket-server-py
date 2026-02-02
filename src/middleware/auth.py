@@ -10,7 +10,7 @@ def auth(f):
     def decorated_function(*args, **kwargs):      
         identity = get_jwt_identity()
         
-        # Parse JSON string if needed (from user_identity_loader)
+        # Parse JSON string if needed
         if isinstance(identity, str):
             try:
                 identity = json.loads(identity)
@@ -18,7 +18,10 @@ def auth(f):
                 pass
         
         # Handle both dict and simple ID formats
-        user_id = identity.get('id') if isinstance(identity, dict) else identity
+        if isinstance(identity, dict):
+            user_id = identity.get('id')
+        else:
+            user_id = identity
         
         user = User.query.filter_by(id=user_id).first()
         if not user:

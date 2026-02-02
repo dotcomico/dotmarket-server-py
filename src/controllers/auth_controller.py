@@ -155,7 +155,14 @@ def login():
 def getMe():
     try:
         current_user = get_jwt_identity()
-        user = User.query.filter_by(id=current_user['id']).first()
+        
+        # Handle both dict and direct ID formats
+        if isinstance(current_user, dict):
+            user_id = current_user['id']
+        else:
+            user_id = current_user
+            
+        user = User.query.filter_by(id=user_id).first()
         if not user:
             return jsonify({'message': 'User not found'}), 404
         return jsonify(user.to_dict(exclude_password=True))
