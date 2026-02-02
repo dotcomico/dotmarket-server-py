@@ -25,7 +25,7 @@ def create_app():
     app = Flask(__name__, static_folder='../public')
     
     PORT = int(os.getenv('PORT', 3000))
-    CORS(app, resources={r"/api/*": {"origins": "*", "allow_headers": ["Authorization", "Content-Type"]}})
+    CORS(app)
     connectDB(app)
    
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET')
