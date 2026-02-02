@@ -343,10 +343,11 @@ def test_create_category():
     print(f"Response: {json.dumps(result['body'], indent=2)}")
     
     if result["ok"]:
-        category = result["body"].get("category", {})
-        ctx.created_category_id = category.get("id")
+        body = result["body"]
+        ctx.created_category_id = body.get("id") or body.get("category", {}).get("id")
+        print(f"DEBUG ctx.created_category_id = {ctx.created_category_id}")
         log_success(f"Category created! ID: {ctx.created_category_id}")
-        log_info(f"Slug generated: {category.get('slug')}")
+        log_info(f"Slug generated: {result['body'].get('slug')}")
         return True
     else:
         log_error("Category creation failed")
