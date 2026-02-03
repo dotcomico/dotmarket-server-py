@@ -16,7 +16,7 @@ docker run -p 3000:3000 dotcoms/supermarket-backend:latest
 ```bash
 cd backend-py
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: .\venv\Scripts\Activate.ps1 
 pip install -r requirements.txt
 python seed_database.py   # Seed database (first time)
 python -m src.main
