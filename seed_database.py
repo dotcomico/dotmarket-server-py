@@ -734,6 +734,243 @@ PRODUCTS = [
         "image": None,
         "image360": None
     },
+
+    # === PRODUCTS ADDED VIA ADMIN PANEL (post-seed) ===
+
+    # Snacks & Sweets (7)
+    {
+        "name": "Proar Protein Bar",
+        "description": "A premium energy bar featuring dark chocolate chunks, whole almonds, and hazelnuts.",
+        "price": 2.49,
+        "stock": 1000,
+        "categoryId": 7,
+        "image": "/uploads/1770122332810.png",
+        "image360": "/uploads/1770122332817.gif"
+    },
+    {
+        "name": "Energy Boost Bar",
+        "description": "A crunchy granola bar packed with roasted peanuts and chocolate chips, designed for a quick energy lift.",
+        "price": 1.89,
+        "stock": 1000,
+        "categoryId": 7,
+        "image": "/uploads/1770122407831.png",
+        "image360": "/uploads/1770122407837.gif"
+    },
+    {
+        "name": "Choc-Top Pop!",
+        "description": "Fluffy popcorn kernels fully coated in a rich, smooth milk chocolate glaze.",
+        "price": 4.50,
+        "stock": 500,
+        "categoryId": 7,
+        "image": "/uploads/1770122729238.png",
+        "image360": "/uploads/1770122729244.gif"
+    },
+
+    # Chips & Crisps (38)
+    {
+        "name": "Crunchy Waves",
+        "description": "Classic ridged potato chips flavored with sour cream and garden onion.",
+        "price": 3.50,
+        "stock": 500,
+        "categoryId": 38,
+        "image": "/uploads/1770122492850.png",
+        "image360": "/uploads/1770122492858.gif"
+    },
+    {
+        "name": "Pretzel Twists",
+        "description": "Oven-baked traditional pretzel knots seasoned with classic sea salt.",
+        "price": 2.99,
+        "stock": 500,
+        "categoryId": 38,
+        "image": "/uploads/1770122552828.png",
+        "image360": "/uploads/1770122552834.gif"
+    },
+    {
+        "name": "Spicy Crunch",
+        "description": "Zesty corn tortilla chips flavored with sharp cheddar cheese and a kick of jalapeño pepper.",
+        "price": 3.25,
+        "stock": 500,
+        "categoryId": 38,
+        "image": "/uploads/1770122639968.png",
+        "image360": "/uploads/1770122639981.gif"
+    },
+
+    # Candy & Chocolate (39)
+    {
+        "name": "Island Fruits",
+        "description": "A mix of premium dried tropical fruits, including pineapple, mango, and kiwi chunks.",
+        "price": 5.99,
+        "stock": 600,
+        "categoryId": 39,
+        "image": "/uploads/1770122831989.png",
+        "image360": "/uploads/1770122831995.gif"
+    },
+    {
+        "name": "Zingy Tangs (Bag)",
+        "description": "A colorful variety of chewy gummy candies coated in an extra-sour crystalline sugar.",
+        "price": 2.75,
+        "stock": 600,
+        "categoryId": 39,
+        "image": "/uploads/1770122887395.png",
+        "image360": "/uploads/1770122887403.gif"
+    },
+    {
+        "name": "Zingy Tangs (Canister)",
+        "description": "The signature sour fruit gummies are packaged in a reusable, eco-friendly cylindrical tin.",
+        "price": 4.99,
+        "stock": 500,
+        "categoryId": 39,
+        "image": "/uploads/1770122965611.png",
+        "image360": "/uploads/1770122965618.gif"
+    },
+
+    # Dish Care (52)
+    {
+        "name": "Ocean Fresh Ultra-Clean® Dishwasher Detergent Gel",
+        "description": "Concentrated Deep Clean Formula | Streak-Free Shine | Easy-Dose Bottle\n\nBring the purifying power of the sea to your kitchen with Ocean Fresh Ultra-Clean® Dishwasher Detergent Gel. This high-performance liquid detergent is specifically engineered to tackle the toughest kitchen challenges, from dried-on proteins to stubborn grease.\n\nSpotless Technology: Formulated to prevent water spots and filming on glassware.\nRapid Dissolve: Optimized for both heavy-duty and eco-friendly short cycles.\nMachine Care: Helps prevent limescale buildup, extending the life of your dishwasher.",
+        "price": 12.90,
+        "stock": 700,
+        "categoryId": 52,
+        "image": "/uploads/1770123952375.png",
+        "image360": "/uploads/1770123952382.gif"
+    },
+
+    # Coffee & Tea (45)
+    {
+        "name": "Aurora Ethiopian Whole Bean Coffee",
+        "description": "A medium-roast specialty coffee with notes of citrus and floral jasmine. Sourced directly from Ethiopian highlands for a smooth and sophisticated morning cup.",
+        "price": 15.99,
+        "stock": 100,
+        "categoryId": 45,
+        "image": "/uploads/1770124669671.png",
+        "image360": "/uploads/1770124669677.gif"
+    },
+
+    # Ice Cream (41)
+    {
+        "name": "Lavender Bloom Artisanal Ice Cream",
+        "description": "A gourmet pint of creamy lavender-infused ice cream with a luscious blackberry swirl. Made with 100% organic cream and natural botanical extracts.",
+        "price": 5.49,
+        "stock": 100,
+        "categoryId": 41,
+        "image": "/uploads/1770124757077.png",
+        "image360": "/uploads/1770124757110.gif"
+    },
+
+    # Juices (44)
+    {
+        "name": "Green Revive Cold-Pressed Superfood Juice",
+        "description": "A refreshing blend of kale, spinach, green apple, ginger, and lemon. Cold-pressed to retain maximum nutrients and vitamins with no added sugar.",
+        "price": 4.99,
+        "stock": 200,
+        "categoryId": 44,
+        "image": "/uploads/1770124876647.png",
+        "image360": "/uploads/1770124876654.gif"
+    },
+
+    # Breakfast & Cereals (37)
+    {
+        "name": "Sunrise Artisanal Honey & Almond Granola",
+        "description": "Crunchy clusters of whole-grain oats toasted with organic honey, roasted almonds, and golden raisins. High in fiber and naturally sweetened.",
+        "price": 6.29,
+        "stock": 150,
+        "categoryId": 37,
+        "image": "/uploads/1770124984124.png",
+        "image360": "/uploads/1770124984132.gif"
+    },
+
+    # Cheese (25)
+    {
+        "name": "Rolling Hills Aged English Cheddar",
+        "description": "A sharp, crumbly cheddar aged for 12 months for a deep, complex flavor profile. Hand-wrapped in parchment, perfect for cheese boards and wine pairings.",
+        "price": 7.99,
+        "stock": 20,
+        "categoryId": 25,
+        "image": "/uploads/1770125125655.png",
+        "image360": "/uploads/1770125125663.gif"
+    },
+    {
+        "name": "Meadow Morn Small Curd Cottage Cheese",
+        "description": "High-protein, all-natural cottage cheese with a smooth texture and small curds. Made with real farm milk.",
+        "price": 4.10,
+        "stock": 500,
+        "categoryId": 25,
+        "image": "/uploads/1770125874478.png",
+        "image360": "/uploads/1770125874481.gif"
+    },
+    {
+        "name": "Creamy Fields Herb & Garlic Spread",
+        "description": "A velvety cream cheese spread infused with fresh herbs and roasted garlic. Perfect for bagels or crackers.",
+        "price": 4.62,
+        "stock": 100,
+        "categoryId": 25,
+        "image": "/uploads/1770126011976.png",
+        "image360": "/uploads/1770126011978.gif"
+    },
+
+    # Yogurt (26)
+    {
+        "name": "Velvet Dairy Blueberry Greek Yogurt",
+        "description": "Rich and creamy probiotic Greek yogurt with a luscious blueberry swirl and oat clusters. Comes in a premium glass jar.",
+        "price": 5.50,
+        "stock": 40,
+        "categoryId": 26,
+        "image": "/uploads/1770125593629.png",
+        "image360": "/uploads/1770125593634.gif"
+    },
+
+    # Milk & Cream (24)
+    {
+        "name": "Oatscape Barista Blend Oat Milk",
+        "description": "Organic, naturally lactose-free oat milk designed for coffee. Creates a perfect micro-foam for lattes and cappuccinos.",
+        "price": 4.90,
+        "stock": 300,
+        "categoryId": 24,
+        "image": "/uploads/1770125711178.png",
+        "image360": None
+    },
+    {
+        "name": "Morning Dew Organic Whole Milk",
+        "description": "Farm-fresh organic whole milk served in a traditional glass bottle to preserve its pure and rich taste.",
+        "price": 6.20,
+        "stock": 600,
+        "categoryId": 24,
+        "image": "/uploads/1770125791273.png",
+        "image360": "/uploads/1770125791274.gif"
+    },
+
+    # Eggs (27)
+    {
+        "name": "Sunrise Farms Organic Brown Eggs",
+        "description": "A carton of farm-fresh, free-range organic brown eggs. Rich in protein and Omega-3 with deep orange yolks.",
+        "price": 7.48,
+        "stock": 0,  # OUT OF STOCK
+        "categoryId": 27,
+        "image": "/uploads/1770126104767.png",
+        "image360": "/uploads/1770126104770.gif"
+    },
+
+    # Pantry & Dry Goods (6)
+    {
+        "name": "Terra Cold-Pressed Extra-Virgin Oil Infused with Kalamata Olives &",
+        "description": "A high-quality, cold-pressed extra-virgin olive oil sourced from Greece. This oil is infused with whole Kalamata olives and fresh rosemary sprigs, creating a rich, aromatic, Mediterranean flavor profile. The bottle includes a seal for protected origin.",
+        "price": 19.99,
+        "stock": 100,
+        "categoryId": 6,
+        "image": "/uploads/1770126840242.png",
+        "image360": "/uploads/1770126840244.gif"
+    },
+
+    # Body Care (55)
+    {
+        "name": "Fresh Bloom Moisturizing Hand Soap with Natural Extracts",
+        "description": "A hydrating liquid hand soap featuring natural botanical extracts and a peony blossom fragrance. The formulation is designed to cleanse hands while leaving them soft, moisturized, and pleasantly scented. It is presented in a clear bottle with a bamboo pump dispenser and includes a small, complementary solid soap bar sample.",
+        "price": 9.99,
+        "stock": 400,
+        "categoryId": 55,
+        "image": "/uploads/1770126971967.png",
+        "image360": "/uploads/1770126971969.gif"
+    },
 ]
 
 # =============================================================================
