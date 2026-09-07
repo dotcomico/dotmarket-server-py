@@ -3,3 +3,8 @@ __pycache__/
 venv
 .vscode
 logs
+*.sqlite
+
+# Claude Code
+CLAUDE.md
+.claude/settings.local.json
