@@ -1,0 +1,220 @@
+# Backend Architecture Improvements — Roadmap
+
+This document tracks the architecture review findings for `backend-py` and lays out
+the fixes in **execution order: smallest/safest first, biggest/riskiest last.**
+Each step is meant to be done, tested, and committed on its own before moving to
+the next one — don't batch multiple steps into one commit.
+
+Check off items as they're done (`[x]`) so this file also works as a running log.
+
+---
+
+## Step 1 — Cap pagination `limit`
+**Size: trivial (~5 min) | Risk: none**
+
+`getAllProducts` and `getProductsByCategory` accept an unbounded `limit` query
+param — a client can request an arbitrarily large page.
+
+- [ ] In `controllers/product_controller.py` (`getAllProducts`) and
+      `controllers/category_controller.py` (`getProductsByCategory`), clamp:
+      `limit = min(int(request.args.get('limit', 10)), 100)`
+
+**Commit:** `fix: clamp pagination limit to a sane maximum`
+
+---
+
+## Step 2 — Fix the SQLite path ambiguity
+**Size: trivial (~10 min) | Risk: low (verify which file is actually live first)**
+
+`config/database.py` resolves `DB_STORAGE` relative to the current working
+directory (`./database.sqlite`), but a second file exists at
+`src/instance/database.sqlite`. Depending on how the app is launched, it's
+not obvious which one is used.
+
+- [ ] Confirm which file the running app currently writes to.
+- [ ] Resolve the path with `Path(__file__)`-relative logic instead of CWD-relative,
+      so it's deterministic regardless of the working directory.
+- [ ] Delete/ignore the stale `.sqlite` file once confirmed unused.
+
+**Commit:** `fix: resolve SQLite database path deterministically`
+
+---
+
+## Step 3 — Delete the dead `asyncHandler`
+**Size: trivial (~5 min) | Risk: none (it's unused)**
+
+`middleware/errorHandler.py` defines `asyncHandler`, a leftover Express idiom
+that is never imported anywhere in the codebase (confirmed via grep).
+
+- [ ] Delete `middleware/errorHandler.py`, **or** keep the file and repurpose it
+      in Step 5 below (pick one — don't do both).
+
+**Commit:** `chore: remove unused asyncHandler leftover from Express port`
+
+---
+
+## Step 4 — Deduplicate JWT identity parsing
+**Size: small (~30 min) | Risk: low**
+
+The same "unwrap the JWT identity (string→JSON→dict, or plain id)" logic is
+copy-pasted in three places:
+- `main.py` (`user_lookup_callback`)
+- `middleware/auth.py` (`auth()`)
+- `controllers/auth_controller.py` (`getMe()`)
+
+- [ ] Add one helper, e.g. `utils/jwt_identity.py::resolve_user_id(identity)`.
+- [ ] Replace all three call sites with it.
+- [ ] Manually re-test login → `/api/auth/me` → any protected route, to confirm
+      identity resolution still works identically.
+
+**Commit:** `refactor: extract shared JWT identity parsing helper`
+
+---
+
+## Step 5 — Add a shared error-logging decorator, remove per-function try/except
+**Size: medium (~1-2 hrs) | Risk: low (behavior-preserving)**
+
+Nearly every controller function repeats:
+```python
+except Exception as error:
+    logger.error('Operation failed', {'error': str(error)})
+    print(f'... error: {error}')
+    return jsonify({'message': 'Server error', 'error': str(error)}), 500
+```
+`main.py` already has a global `@app.errorhandler(Exception)` — this
+boilerplate exists mainly to add the `logger.error` call.
+
+- [ ] Add one decorator (this is where `asyncHandler` from Step 3 gets reborn,
+      if you chose to keep the file) that logs the exception and re-raises,
+      letting the global handler build the response.
+- [ ] Apply it to every controller function, removing the local `try/except`.
+- [ ] Confirm error responses (shape/status code) are unchanged by hitting a
+      few endpoints with bad input.
+
+**Commit:** `refactor: replace per-function try/except with shared error-logging decorator`
+
+---
+
+## Step 6 — Add a shared validation helper module
+**Size: medium (~1-2 hrs) | Risk: low**
+
+`auth_controller.py` and `product_controller.py` each hand-roll their own
+`validate*()` functions (duplicating the email regex, required-string checks,
+etc.); `category_controller.py` and `order_controller.py` validate inline
+with scattered `if not X: return jsonify(...), 400`.
+
+- [ ] Create `utils/validators.py` with small composable helpers:
+      `required_string(value, field, min_len=None, max_len=None)`,
+      `positive_number(value, field)`, `one_of(value, field, allowed)`, etc.
+      Each returns an error dict or `None`.
+- [ ] Migrate `auth_controller.validateRegister/validateLogin` and
+      `product_controller.validateProduct` to use them.
+- [ ] Migrate the inline checks in `category_controller.py` /
+      `order_controller.py` to use them too.
+
+**Commit:** `refactor: introduce shared validation helpers, remove duplicated checks`
+
+---
+
+## Step 7 — Cap pagination is done, now cap recursive category queries
+**Size: medium (~1 hr) | Risk: low (only matters if the tree grows)**
+
+`category_controller.py`'s `is_descendant`, `getAllChildIds`, and
+`build_tree` each issue one DB query per node, recursively (N+1 pattern).
+Not urgent at current data volume, but worth doing while touching this file
+in Step 6/8 anyway.
+
+- [ ] Replace the per-node recursive queries with a single query that loads
+      all categories once and builds the tree/ancestry in memory.
+
+**Commit:** `perf: build category tree/ancestry from a single query instead of N+1`
+
+---
+
+## Step 8 — Collapse the routes-as-pure-passthrough layer
+**Size: medium (~1-2 hrs) | Risk: low (mechanical, one resource at a time)**
+
+Every function in `routes/*.py` currently just forwards to a controller
+function with identical arguments — it's a layer that adds no behavior.
+
+- [ ] Do this one resource at a time (`products` first, as a template).
+- [ ] Either (a) register controller functions directly as blueprint view
+      functions, or (b) move the controller logic straight into the route file.
+      Prefer (b), since Step 9 will pull the actual logic out into services
+      anyway — so this step is really "delete the redundant middle file" per resource.
+- [ ] Re-test each resource's endpoints after collapsing it, before moving to
+      the next resource.
+
+**Commit (per resource):** `refactor: collapse products route/controller passthrough`
+(repeat for categories, orders, users, auth)
+
+---
+
+## Step 9 — Extract a services layer (the big one)
+**Size: large (~half day to a day) | Risk: medium — do this last, one resource at a time**
+
+This is the highest-impact, highest-effort change: controllers currently mix
+request-parsing, validation, DB queries, business rules, and response
+shaping in one function, which makes them impossible to unit-test without a
+running Flask app.
+
+- [ ] Create `services/` with one file per resource:
+      `product_service.py`, `category_service.py`, `order_service.py`,
+      `user_service.py` (auth logic can fold into `user_service.py` or stay
+      separate as `auth_service.py`).
+- [ ] Move DB queries + business rules out of each route file into the
+      matching service function. Services take plain arguments and return
+      plain dicts/model instances — **no `flask.request` / `jsonify` inside
+      services.**
+- [ ] The route function becomes: parse `request` → call service → shape
+      response with `jsonify(...)`.
+- [ ] Do this **one resource at a time**, fully re-testing each resource
+      (register/login, products CRUD, categories CRUD + tree, orders
+      checkout flow) before starting the next, since this is the step most
+      likely to introduce a subtle behavior change.
+- [ ] Order of resources (simplest data flow first):
+      1. `users` (smallest, 3 endpoints)
+      2. `auth` (register/login/me — self-contained)
+      3. `products` (CRUD + filters, no cross-resource logic)
+      4. `categories` (recursive tree logic — benefits from Step 7 being done first)
+      5. `orders` (most business-critical — stock decrement + transaction — do last, with the most care)
+
+**Commit (per resource):** `refactor: extract product_service from product routes`
+(repeat for auth, categories, orders — orders last)
+
+---
+
+## Step 10 — Add real automated tests against the new services
+**Size: large (ongoing) | Risk: none — this is what makes Step 9 safe going forward**
+
+Once services exist and don't depend on a running Flask app, they can be
+unit-tested directly. `test_server_creations.py` (the existing manual
+`requests`-based script) stays useful as a smoke test, but isn't a
+substitute for this.
+
+- [ ] Add `pytest` to `requirements.txt`.
+- [ ] Add `tests/` with one test file per service, covering the validation
+      and business-rule branches (invalid stock, duplicate email, category
+      cycle prevention, etc.).
+- [ ] Wire this into whatever CI (if any) runs before merges.
+
+**Commit:** `test: add pytest suite covering the new service layer`
+
+---
+
+## Why this order
+
+- Steps 1-3 are pure deletions/one-line fixes with zero behavioral ambiguity —
+  good warm-up, immediate value, no risk of breaking anything.
+- Steps 4-7 are refactors that remove duplication **without moving where
+  logic lives** — still low-risk, and they shrink the files that Steps 8-9
+  will need to touch anyway, making those safer.
+- Step 8 removes a structural layer but keeps logic in place — mechanical,
+  low-risk, one resource at a time.
+- Step 9 is the only step that actually relocates business logic — done last,
+  and only after 1-8 have already shrunk/cleaned the code it's moving, and
+  done one resource at a time so a mistake in `orders` (the riskiest one)
+  doesn't block or contaminate the others.
+- Step 10 is what makes all future changes to the service layer safe, so it
+  closes out the roadmap rather than starting it — there's nothing meaningful
+  to unit-test until Step 9 exists.
