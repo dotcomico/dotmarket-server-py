@@ -31,10 +31,21 @@ directory (`./database.sqlite`), but a second file exists at
 `src/instance/database.sqlite`. Depending on how the app is launched, it's
 not obvious which one is used.
 
-- [ ] Confirm which file the running app currently writes to.
-- [ ] Resolve the path with `Path(__file__)`-relative logic instead of CWD-relative,
-      so it's deterministic regardless of the working directory.
-- [ ] Delete/ignore the stale `.sqlite` file once confirmed unused.
+- [x] Confirm which file the running app currently writes to. — `src/instance/database.sqlite`
+      is the real data (3 users, 60 categories, 84 products, 5 orders, 12 order items);
+      `.env`'s `DB_STORAGE` was wrongly pointing at `./database.sqlite` (empty). Fixed by
+      correcting `DB_STORAGE=./src/instance/database.sqlite` in the local `.env` — this was
+      the entire bug (see the "two DB/env setup" note below).
+- [x] ~~Resolve the path with `Path(__file__)`-relative logic instead of CWD-relative~~ —
+      considered and reverted. The app is always launched from the repo root
+      (`python -m src.main`), so CWD-relative resolution already behaves deterministically
+      in practice; the `Path(__file__)` version was extra complexity solving a problem that
+      wasn't actually being hit. Not applied.
+- [x] Delete/ignore the stale `.sqlite` file once confirmed unused. — N/A: there is no stale
+      file. `.env.example` intentionally points `DB_STORAGE` at `./database.sqlite`, a
+      **blank starting DB for new installs** (populated via `seed_database.py`), while `.env`
+      (gitignored, real local config) points at `src/instance/database.sqlite`, the real data.
+      Both are needed; do not unify or delete either.
 
 **Commit:** `fix: resolve SQLite database path deterministically`
 
@@ -46,8 +57,10 @@ not obvious which one is used.
 `middleware/errorHandler.py` defines `asyncHandler`, a leftover Express idiom
 that is never imported anywhere in the codebase (confirmed via grep).
 
-- [ ] Delete `middleware/errorHandler.py`, **or** keep the file and repurpose it
-      in Step 5 below (pick one — don't do both).
+- [x] Delete `middleware/errorHandler.py`, **or** keep the file and repurpose it
+      in Step 5 below (pick one — don't do both). — Deleted (confirmed via grep
+      it was never imported anywhere). Step 5 will write a fresh log-and-reraise
+      decorator rather than reusing this one.
 
 **Commit:** `chore: remove unused asyncHandler leftover from Express port`
 
@@ -62,10 +75,23 @@ copy-pasted in three places:
 - `middleware/auth.py` (`auth()`)
 - `controllers/auth_controller.py` (`getMe()`)
 
-- [ ] Add one helper, e.g. `utils/jwt_identity.py::resolve_user_id(identity)`.
-- [ ] Replace all three call sites with it.
-- [ ] Manually re-test login → `/api/auth/me` → any protected route, to confirm
-      identity resolution still works identically.
+- [x] Add one helper, e.g. `utils/jwt_identity.py::resolve_user_id(identity)`. —
+      Added `parse_identity()` (JSON-string → dict, else unchanged) and
+      `resolve_user_id()` (parse then pull `.get('id')` if a dict) in
+      `src/utils/jwt_identity.py`.
+- [x] Replace all three call sites with it. — `main.py::user_lookup_callback`
+      now calls `parse_identity`; `middleware/auth.py::auth` and
+      `auth_controller.py::getMe` now call `resolve_user_id`.
+- [x] Manually re-test login → `/api/auth/me` → any protected route, to confirm
+      identity resolution still works identically. — Couldn't boot the live
+      server in this sandbox (pre-existing sqlite3 "unable to open database
+      file" error, reproduced identically on unmodified `master`, unrelated
+      to this change). Verified equivalence instead by exercising the new
+      helper against every identity shape the old duplicated code branched
+      on (JSON-encoded dict, plain dict, non-JSON string, plain int,
+      malformed JSON) — all five matched the old logic. **Recommend the user
+      manually re-test login → `/api/auth/me` on their machine before
+      merging**, since that's the one check this environment couldn't run.
 
 **Commit:** `refactor: extract shared JWT identity parsing helper`
 

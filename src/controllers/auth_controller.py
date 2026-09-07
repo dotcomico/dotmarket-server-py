@@ -1,4 +1,3 @@
-import json
 import re
 import bcrypt
 from flask import request, jsonify
@@ -7,6 +6,7 @@ from src.models.User import User
 from src.config.database import db
 from src.config.constants import ROLES
 from src.utils.logger import logger
+from src.utils.jwt_identity import resolve_user_id
 
 def validateRegister(data):
     errors = []
@@ -155,18 +155,7 @@ def login():
 
 def getMe():
     try:
-        identity = get_jwt_identity()
-        user_id = None
-
-        # parse the identity if its a JSON string
-        if isinstance(identity, str):
-            try:
-                data = json.loads(identity)
-                user_id = data.get('id')
-            except json.JSONDecodeError:
-                user_id = identity 
-        elif isinstance(identity, dict):
-            user_id = identity.get('id')
+        user_id = resolve_user_id(get_jwt_identity())
 
         # search with integer/ID
         user = User.query.get(user_id) 

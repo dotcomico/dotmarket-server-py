@@ -1,28 +1,15 @@
-import json
 from functools import wraps
 from flask import jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity, current_user
 from src.models.User import User
+from src.utils.jwt_identity import resolve_user_id
 
 def auth(f):
     @wraps(f)
     @jwt_required()
-    def decorated_function(*args, **kwargs):      
-        identity = get_jwt_identity()
-        
-        # Parse JSON string if needed
-        if isinstance(identity, str):
-            try:
-                identity = json.loads(identity)
-            except (json.JSONDecodeError, TypeError):
-                pass
-        
-        # Handle both dict and simple ID formats
-        if isinstance(identity, dict):
-            user_id = identity.get('id')
-        else:
-            user_id = identity
-        
+    def decorated_function(*args, **kwargs):
+        user_id = resolve_user_id(get_jwt_identity())
+
         user = User.query.filter_by(id=user_id).first()
         if not user:
             return jsonify({'message': 'User no longer exists'}), 401

@@ -6,6 +6,7 @@ from flask_jwt_extended import JWTManager
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from src.config.database import db, connectDB
+from src.utils.jwt_identity import parse_identity
 from src.models.User import User
 from src.models.Product import Product
 from src.models.Order import Order
@@ -44,11 +45,7 @@ def create_app():
     @jwt.user_lookup_loader
     def user_lookup_callback(_jwt_header, jwt_data):
         """Load user data from JWT - returns the identity"""
-        identity = jwt_data["sub"]
-        try:
-            return json.loads(identity)
-        except (json.JSONDecodeError, TypeError):
-            return identity
+        return parse_identity(jwt_data["sub"])
     
     limiter = Limiter(
         key_func=get_remote_address,
