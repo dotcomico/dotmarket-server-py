@@ -60,7 +60,7 @@ def getAllProducts():
     # for search, filters, pagination
     try:
         page = int(request.args.get('page', 1))
-        limit = int(request.args.get('limit', 10))
+        limit = min(int(request.args.get('limit', 10)), 100)
         search = request.args.get('search')
         categoryId = request.args.get('categoryId')
         minPrice = request.args.get('minPrice')

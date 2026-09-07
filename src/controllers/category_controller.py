@@ -228,7 +228,7 @@ def getAllCategories():
 def getProductsByCategory(slug):
     try:
         page = int(request.args.get('page', 1))
-        limit = int(request.args.get('limit', 20))
+        limit = min(int(request.args.get('limit', 20)), 100)
         minPrice = request.args.get('minPrice')
         maxPrice = request.args.get('maxPrice')
         search = request.args.get('search')

@@ -15,7 +15,7 @@ Check off items as they're done (`[x]`) so this file also works as a running log
 `getAllProducts` and `getProductsByCategory` accept an unbounded `limit` query
 param — a client can request an arbitrarily large page.
 
-- [ ] In `controllers/product_controller.py` (`getAllProducts`) and
+- [x] In `controllers/product_controller.py` (`getAllProducts`) and
       `controllers/category_controller.py` (`getProductsByCategory`), clamp:
       `limit = min(int(request.args.get('limit', 10)), 100)`
 
