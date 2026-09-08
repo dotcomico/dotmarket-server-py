@@ -6,6 +6,7 @@ from src.models.Product import Product
 from src.config.database import db
 from src.utils.logger import logger
 from src.utils.error_handler import handle_errors
+from src.utils.validators import required_string
 from src.middleware.multer import save_uploaded_file, delete_uploaded_file
 
 @handle_errors
@@ -19,8 +20,9 @@ def createCategory():
     parentId = data.get('parentId')
     icon = data.get('icon')
 
-    if not name or not name.strip():
-        return jsonify({'message': 'Category name is required'}), 400
+    error = required_string(name, 'name', message='Category name is required')
+    if error:
+        return jsonify({'message': error['msg']}), 400
 
     #image path
     image = None
@@ -72,8 +74,9 @@ def updateCategory(id):
     removeImage = data.get('removeImage')
 
     if name is not None:
-        if not name.strip():
-            return jsonify({'message': 'Category name cannot be empty'}), 400
+        error = required_string(name, 'name', message='Category name cannot be empty')
+        if error:
+            return jsonify({'message': error['msg']}), 400
 
         category.name = name.strip()
 

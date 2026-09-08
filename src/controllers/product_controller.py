@@ -5,48 +5,25 @@ from src.models.Category import Category
 from src.config.database import db
 from src.utils.logger import logger
 from src.utils.error_handler import handle_errors
+from src.utils.validators import required_string, positive_number, max_length
 from src.middleware.multer import save_uploaded_file
 
 def validateProduct(data, files=None):
-    errors = []
-    # Name
-    name = data.get('name', '').strip() if data.get('name') else ''
-    if not name:
-        errors.append({'type': 'field', 'msg': 'Name is required', 'path': 'name'})
-    elif len(name) < 3 or len(name) > 100:
-        errors.append({'type': 'field', 'msg': 'Name must be 3-100 characters', 'path': 'name'})
+    errors = [
+        required_string(data.get('name'), 'name', min_len=3, max_len=100),
+        positive_number(data.get('price', 0), 'price'),
+        positive_number(data.get('categoryId', 0), 'categoryId', integer=True,
+                         message='Valid category ID required'),
+        max_length(data.get('description', ''), 'description', 1000,
+                   message='Description too long (max 1000 chars)'),
+    ]
 
-    # Price
-    try:
-        price = float(data.get('price', 0))
-        if price <= 0:
-            errors.append({'type': 'field', 'msg': 'Price must be greater than 0', 'path': 'price'})
-    except (ValueError, TypeError):
-        errors.append({'type': 'field', 'msg': 'Price must be greater than 0', 'path': 'price'})
-
-    # Category ID
-    try:
-        categoryId = int(data.get('categoryId', 0))
-        if categoryId <= 0:
-            errors.append({'type': 'field', 'msg': 'Valid category ID required', 'path': 'categoryId'})
-    except (ValueError, TypeError):
-        errors.append({'type': 'field', 'msg': 'Valid category ID required', 'path': 'categoryId'})
-
-    # Description validation
-    description = data.get('description', '')
-    if description and len(description) > 1000:
-        errors.append({'type': 'field', 'msg': 'Description too long (max 1000 chars)', 'path': 'description'})
-
-    # Stock validation
+    # Stock validation (only if provided)
     if data.get('stock') is not None:
-        try:
-            stock = int(data.get('stock', 0))
-            if stock < 0:
-                errors.append({'type': 'field', 'msg': 'Stock must be 0 or positive', 'path': 'stock'})
-        except (ValueError, TypeError):
-            errors.append({'type': 'field', 'msg': 'Stock must be 0 or positive', 'path': 'stock'})
+        errors.append(positive_number(data.get('stock', 0), 'stock', allow_zero=True, integer=True,
+                                       message='Stock must be 0 or positive'))
 
-    return errors
+    return [e for e in errors if e]
 
 def handleValidationErrors(errors):
     #Helper - check validation results

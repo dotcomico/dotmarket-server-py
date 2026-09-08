@@ -7,6 +7,7 @@ from src.config.database import db
 from src.config.constants import ROLES, ORDER_STATUS
 from src.utils.logger import logger
 from src.utils.error_handler import handle_errors
+from src.utils.validators import required_list, one_of
 
 @handle_errors
 def getAllOrders():
@@ -46,8 +47,9 @@ def createOrder():
     items = data.get('items', [])
     address = data.get('address')
 
-    if not items or len(items) == 0:
-        return jsonify({'message': 'Order must contain at least one item'}), 400
+    error = required_list(items, 'items', message='Order must contain at least one item')
+    if error:
+        return jsonify({'message': error['msg']}), 400
 
     totalAmount = 0
     orderItems = []
@@ -122,8 +124,9 @@ def updateOrderStatus(id):
     data = request.get_json()
     status = data.get('status')
 
-    if status not in ORDER_STATUS.values():
-        return jsonify({'message': 'Invalid order status'}), 400
+    error = one_of(status, 'status', ORDER_STATUS.values(), message='Invalid order status')
+    if error:
+        return jsonify({'message': error['msg']}), 400
 
     order = Order.query.filter_by(id=id).first()
 

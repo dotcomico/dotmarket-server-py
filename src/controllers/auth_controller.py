@@ -1,4 +1,3 @@
-import re
 import bcrypt
 from flask import request, jsonify
 from flask_jwt_extended import create_access_token, get_jwt_identity
@@ -8,50 +7,27 @@ from src.config.constants import ROLES
 from src.utils.logger import logger
 from src.utils.jwt_identity import resolve_user_id
 from src.utils.error_handler import handle_errors
+from src.utils.validators import required_string, valid_email, strong_password, one_of
 
 def validateRegister(data):
     errors = []
-    # Username
-    username = data.get('username', '').strip()
-    if not username:
-        errors.append({'type': 'field', 'msg': 'Username is required', 'path': 'username'})
-    elif len(username) < 3 or len(username) > 30:
-        errors.append({'type': 'field', 'msg': 'Username must be 3-30 characters', 'path': 'username'})
+    errors.append(required_string(data.get('username'), 'username', min_len=3, max_len=30))
+    errors.append(valid_email(data.get('email'), 'email'))
+    errors.append(strong_password(data.get('password'), 'password'))
 
-    # Emaiel
-    email = data.get('email', '').strip().lower()
-    email_regex = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
-    if not email or not re.match(email_regex, email):
-        errors.append({'type': 'field', 'msg': 'Valid email is required', 'path': 'email'})
-
-    # Password
-    password = data.get('password', '')
-    if len(password) < 6:
-        errors.append({'type': 'field', 'msg': 'Password must be at least 6 characters', 'path': 'password'})
-    elif not re.match(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)', password):
-        errors.append({'type': 'field', 'msg': 'Password must contain uppercase, lowercase, and number', 'path': 'password'})
-
-    # Role
+    # Role (optional)
     role = data.get('role')
-    if role and role not in ROLES.values():
-        errors.append({'type': 'field', 'msg': 'Invalid role', 'path': 'role'})
+    if role:
+        errors.append(one_of(role, 'role', ROLES.values()))
 
-    return errors
+    return [e for e in errors if e]
 
 def validateLogin(data):
-    errors = []
-    # Email
-    email = data.get('email', '').strip().lower()
-    email_regex = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
-    if not email or not re.match(email_regex, email):
-        errors.append({'type': 'field', 'msg': 'Valid email is required', 'path': 'email'})
-
-    # Password
-    password = data.get('password', '')
-    if not password:
-        errors.append({'type': 'field', 'msg': 'Password is required', 'path': 'password'})
-
-    return errors
+    errors = [
+        valid_email(data.get('email'), 'email'),
+        required_string(data.get('password'), 'password'),
+    ]
+    return [e for e in errors if e]
 
 @handle_errors
 def register():
