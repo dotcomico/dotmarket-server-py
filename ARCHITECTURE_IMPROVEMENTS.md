@@ -264,11 +264,38 @@ running Flask app.
       password/missing field, register success/duplicate-email/validation
       errors, `/me` with and without a token) — all byte-identical to
       before. Test user created during `auth` testing was deleted afterward.
+      `products` re-tested live (list/paginate, get-by-id, get-404,
+      unauthenticated create → 401, create validation errors → 400, invalid
+      categoryId → 400, valid create → 201, partial update → 200, update-404,
+      delete → 200, delete-again → 404) — all byte-identical to before.
+      `src/services/product_service.py` added, `src/controllers/product_controller.py`
+      deleted, `routes/products.py` now parses `request`/multipart-vs-JSON →
+      calls the service → `jsonify(...)`s the result, with `@handle_errors`
+      moved onto the route functions (same pattern as `auth.py`). Image
+      uploads stay Flask-free in the service by having the route pull the
+      `FileStorage` objects out of `request.files` and pass them in as plain
+      arguments. Temp admin user and temp product created for testing were
+      deleted afterward.
+      `categories` re-tested live (tree, list-all, get-by-slug, slug-404,
+      products-by-category, create validation error, invalid parentId, valid
+      create, duplicate-name → 400, child create, get-by-id auth-required,
+      update self-as-parent → 400, update cycle-as-parent → 400, update
+      missing-parent → 400, update rename/icon → 200, delete-with-children →
+      400, delete → 200, delete-again → 404) — all byte-identical to before.
+      `src/services/category_service.py` added (reuses `utils/category_tree.py`
+      from Step 7 unchanged), `src/controllers/category_controller.py`
+      deleted, `routes/categories.py` follows the same route-parses/
+      calls-service/jsonify's-result shape. Kept the pre-existing quirk that
+      an error body uses `'error'` (not `'message'`) as the key specifically
+      for a failed image upload — not unified here, since Step 9 is
+      behavior-preserving by design; worth flagging as cleanup for a future
+      pass. Temp admin user and temp categories created for testing were
+      deleted afterward.
 - [ ] Order of resources (simplest data flow first):
       1. [x] `users` (smallest, 3 endpoints) — done, see above
       2. [x] `auth` (register/login/me — self-contained) — done, see above
-      3. [ ] `products` (CRUD + filters, no cross-resource logic)
-      4. [ ] `categories` (recursive tree logic — benefits from Step 7 being done first)
+      3. [x] `products` (CRUD + filters, no cross-resource logic) — done, see below
+      4. [x] `categories` (recursive tree logic — benefits from Step 7 being done first) — done, see below
       5. [ ] `orders` (most business-critical — stock decrement + transaction — do last, with the most care)
 
 **Commit (per resource):** `refactor: extract product_service from product routes`
