@@ -202,22 +202,22 @@ rejected. Test data removed and the DB restored from a backup afterwards.
 
 ---
 
-## Step 8 — Collapse the routes-as-pure-passthrough layer
+## Step 8 — ~~Collapse the routes-as-pure-passthrough layer~~ SKIPPED, by decision
 **Size: medium (~1-2 hrs) | Risk: low (mechanical, one resource at a time)**
 
-Every function in `routes/*.py` currently just forwards to a controller
-function with identical arguments — it's a layer that adds no behavior.
+Considered and deliberately skipped. Collapsing route+controller into one
+file first would have meant temporarily dumping a controller's full body
+(validation + DB queries + response shaping) into the route file — e.g.
+`routes/products.py` would balloon from ~40 lines to ~500 — only to split
+it apart again one step later in Step 9 along the real route/service seam.
+That's a real, if temporary, readability cost for no lasting benefit, since
+Step 9 was always going to touch every one of these files anyway.
 
-- [ ] Do this one resource at a time (`products` first, as a template).
-- [ ] Either (a) register controller functions directly as blueprint view
-      functions, or (b) move the controller logic straight into the route file.
-      Prefer (b), since Step 9 will pull the actual logic out into services
-      anyway — so this step is really "delete the redundant middle file" per resource.
-- [ ] Re-test each resource's endpoints after collapsing it, before moving to
-      the next resource.
+Decision: go straight from the current controller-does-everything shape to
+Step 9's route → service split, skipping the intermediate collapsed-file
+state entirely.
 
-**Commit (per resource):** `refactor: collapse products route/controller passthrough`
-(repeat for categories, orders, users, auth)
+---
 
 ---
 
@@ -229,26 +229,47 @@ request-parsing, validation, DB queries, business rules, and response
 shaping in one function, which makes them impossible to unit-test without a
 running Flask app.
 
-- [ ] Create `services/` with one file per resource:
+- [x] Create `services/` with one file per resource:
       `product_service.py`, `category_service.py`, `order_service.py`,
       `user_service.py` (auth logic can fold into `user_service.py` or stay
-      separate as `auth_service.py`).
-- [ ] Move DB queries + business rules out of each route file into the
+      separate as `auth_service.py`).  — `src/services/user_service.py` and
+      `src/services/auth_service.py` added so far (products/categories/orders
+      still pending below).
+- [x] Move DB queries + business rules out of each route file into the
       matching service function. Services take plain arguments and return
       plain dicts/model instances — **no `flask.request` / `jsonify` inside
-      services.**
-- [ ] The route function becomes: parse `request` → call service → shape
-      response with `jsonify(...)`.
-- [ ] Do this **one resource at a time**, fully re-testing each resource
+      services.** — done for `users`; `update_user_role` returns
+      `(result, error)` with `error = {'status', 'message'}` so the route
+      can pick the HTTP status without the service touching Flask. `auth`
+      follows the same shape, plus an optional `errors` list for
+      field-level validation failures (register/login keep their existing
+      `{'type','msg','path'}` shape from Step 6's validators).
+- [x] The route function becomes: parse `request` → call service → shape
+      response with `jsonify(...)`. — done for all 3 endpoints in
+      `routes/users.py` (`/profile`, `GET /`, `PUT /<id>/role`) and all 3 in
+      `routes/auth.py` (`/register`, `/login`, `/me`); `auth.py` keeps a
+      small `_error_response()` helper to avoid repeating the
+      error-dict-to-jsonify mapping 3 times. `controllers/auth_controller.py`
+      deleted (fully replaced by `services/auth_service.py`). The
+      `@handle_errors` decorator (Step 5) moved from the old controller
+      functions onto the route functions — it's HTTP-boilerplate (rollback +
+      logging + 500 shape), so it belongs at the route layer, not inside a
+      Flask-free service.
+- [x] Do this **one resource at a time**, fully re-testing each resource
       (register/login, products CRUD, categories CRUD + tree, orders
       checkout flow) before starting the next, since this is the step most
-      likely to introduce a subtle behavior change.
+      likely to introduce a subtle behavior change. — `users` re-tested live
+      (profile, list, invalid role → 400, missing user → 404, legit
+      update round-trip → 200); `auth` re-tested live (login success/wrong
+      password/missing field, register success/duplicate-email/validation
+      errors, `/me` with and without a token) — all byte-identical to
+      before. Test user created during `auth` testing was deleted afterward.
 - [ ] Order of resources (simplest data flow first):
-      1. `users` (smallest, 3 endpoints)
-      2. `auth` (register/login/me — self-contained)
-      3. `products` (CRUD + filters, no cross-resource logic)
-      4. `categories` (recursive tree logic — benefits from Step 7 being done first)
-      5. `orders` (most business-critical — stock decrement + transaction — do last, with the most care)
+      1. [x] `users` (smallest, 3 endpoints) — done, see above
+      2. [x] `auth` (register/login/me — self-contained) — done, see above
+      3. [ ] `products` (CRUD + filters, no cross-resource logic)
+      4. [ ] `categories` (recursive tree logic — benefits from Step 7 being done first)
+      5. [ ] `orders` (most business-critical — stock decrement + transaction — do last, with the most care)
 
 **Commit (per resource):** `refactor: extract product_service from product routes`
 (repeat for auth, categories, orders — orders last)
