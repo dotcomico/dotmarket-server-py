@@ -23,6 +23,19 @@ def _error(field, msg):
     return {'type': 'field', 'msg': msg, 'path': field}
 
 
+def required(value, field, message=None):
+    """Presence only — truthiness, without stripping.
+
+    Distinct from `required_string`: a whitespace-only value passes here.
+    Used where the value is an opaque secret rather than a display string
+    (e.g. a login password), so trimming it would change what the caller
+    accepts.
+    """
+    if not value:
+        return _error(field, message or f'{field.capitalize()} is required')
+    return None
+
+
 def required_string(value, field, min_len=None, max_len=None, message=None, length_message=None):
     """Non-empty (after strip) string, optionally length-bounded."""
     text = value.strip() if isinstance(value, str) else ''

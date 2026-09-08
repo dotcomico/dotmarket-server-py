@@ -7,7 +7,7 @@ from src.config.constants import ROLES
 from src.utils.logger import logger
 from src.utils.jwt_identity import resolve_user_id
 from src.utils.error_handler import handle_errors
-from src.utils.validators import required_string, valid_email, strong_password, one_of
+from src.utils.validators import required, required_string, valid_email, strong_password, one_of
 
 def validateRegister(data):
     errors = []
@@ -25,7 +25,7 @@ def validateRegister(data):
 def validateLogin(data):
     errors = [
         valid_email(data.get('email'), 'email'),
-        required_string(data.get('password'), 'password'),
+        required(data.get('password'), 'password'),
     ]
     return [e for e in errors if e]
 
