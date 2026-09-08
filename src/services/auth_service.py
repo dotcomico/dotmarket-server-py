@@ -1,13 +1,13 @@
 import bcrypt
-from flask import request, jsonify
-from flask_jwt_extended import create_access_token, get_jwt_identity
-from src.models.User import User
-from src.config.database import db
+from flask_jwt_extended import create_access_token
+
 from src.config.constants import ROLES
-from src.utils.logger import logger
+from src.config.database import db
+from src.models.User import User
 from src.utils.jwt_identity import resolve_user_id
-from src.utils.error_handler import handle_errors
+from src.utils.logger import logger
 from src.utils.validators import required, required_string, valid_email, strong_password, one_of
+
 
 def validateRegister(data):
     errors = []
@@ -22,6 +22,7 @@ def validateRegister(data):
 
     return [e for e in errors if e]
 
+
 def validateLogin(data):
     errors = [
         valid_email(data.get('email'), 'email'),
@@ -29,30 +30,28 @@ def validateLogin(data):
     ]
     return [e for e in errors if e]
 
-@handle_errors
-def register():
-    data = request.get_json()
-    # errors
+
+def register_user(data):
+    """Create a new user account and issue a JWT.
+
+    Local (auth-specific). Returns (result, error): `error` carries
+    {'status', 'message'} and, for validation failures, an `errors` list —
+    the route maps this straight onto the old response shape.
+    """
     errors = validateRegister(data)
     if errors:
-        return jsonify({
-            'message': 'Validation failed',
-            'errors': errors
-        }), 400
+        return None, {'status': 400, 'message': 'Validation failed', 'errors': errors}
+
     username = data.get('username', '').strip()
     email = data.get('email', '').strip().lower()
     password = data.get('password')
     role = data.get('role')
 
-    # Check if exists
-    existingUser = User.query.filter_by(email=email).first()
-    if existingUser:
-        return jsonify({'message': 'User already exists with this email'}), 400
+    if User.query.filter_by(email=email).first():
+        return None, {'status': 400, 'message': 'User already exists with this email'}
 
-    # Check if uniq
-    existingUsername = User.query.filter_by(username=username).first()
-    if existingUsername:
-        return jsonify({'message': 'Username already taken'}), 400
+    if User.query.filter_by(username=username).first():
+        return None, {'status': 400, 'message': 'Username already taken'}
 
     salt = bcrypt.gensalt(rounds=10)
     hashedPassword = bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
@@ -70,7 +69,7 @@ def register():
 
     token = create_access_token(identity={'id': newUser.id, 'role': newUser.role})
 
-    return jsonify({
+    return {
         'message': 'User registered successfully',
         'token': token,
         'user': {
@@ -79,37 +78,27 @@ def register():
             'email': newUser.email,
             'role': newUser.role
         }
-    }), 201
+    }, None
 
-@handle_errors
-def login():
-    data = request.get_json()
 
-    #  errors
+def login_user(data):
+    """Authenticate a user and issue a JWT. Local (auth-specific)."""
     errors = validateLogin(data)
     if errors:
-        return jsonify({
-            'message': 'Validation failed',
-            'errors': errors
-        }), 400
+        return None, {'status': 400, 'message': 'Validation failed', 'errors': errors}
 
     email = data.get('email', '').strip().lower()
     password = data.get('password')
 
     user = User.query.filter_by(email=email).first()
-    if not user:
+    if not user or not bcrypt.checkpw(password.encode('utf-8'), user.password.encode('utf-8')):
         logger.warn('Login failed', {'email': email, 'reason': 'wrong password'})
-        return jsonify({'message': 'Invalid email or password'}), 401
-
-    isMatch = bcrypt.checkpw(password.encode('utf-8'), user.password.encode('utf-8'))
-    if not isMatch:
-        logger.warn('Login failed', {'email': email, 'reason': 'wrong password'})
-        return jsonify({'message': 'Invalid email or password'}), 401
+        return None, {'status': 401, 'message': 'Invalid email or password'}
 
     logger.info('User logged in', {'userId': user.id})
     token = create_access_token(identity={'id': user.id, 'role': user.role})
 
-    return jsonify({
+    return {
         'message': 'Login successful',
         'token': token,
         'user': {
@@ -118,15 +107,13 @@ def login():
             'email': user.email,
             'role': user.role
         }
-    })
+    }, None
 
-@handle_errors
-def getMe():
-    user_id = resolve_user_id(get_jwt_identity())
 
-    # search with integer/ID
+def get_me(jwt_identity):
+    """Look up the currently-authenticated user. Local (auth-specific)."""
+    user_id = resolve_user_id(jwt_identity)
     user = User.query.get(user_id)
     if not user:
-        return jsonify({'message': 'User not found'}), 404
-
-    return jsonify(user.to_dict(exclude_password=True))
+        return None, {'status': 404, 'message': 'User not found'}
+    return user.to_dict(exclude_password=True), None
