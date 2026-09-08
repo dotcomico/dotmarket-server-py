@@ -1,6 +1,7 @@
 import re
 from flask import request, jsonify
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from src.models.Category import Category
 from src.models.Product import Product
 from src.config.database import db
@@ -32,15 +33,25 @@ def createCategory():
         except ValueError as e:
             return jsonify({'error': str(e)}), 400
 
+    try:
+        parentId = int(parentId) if parentId else None
+    except (ValueError, TypeError):
+        return jsonify({'message': 'Invalid parent category ID'}), 400
+
     category = Category(
         name=name.strip(),
-        parentId=int(parentId) if parentId else None,
+        parentId=parentId,
         icon=icon.strip() if icon else None,
         image=image
     )
 
-    db.session.add(category)
-    db.session.commit()
+    try:
+        db.session.add(category)
+        db.session.commit()
+    except IntegrityError as e:
+        # e.g. a duplicate name -> duplicate auto-generated slug (unique constraint)
+        db.session.rollback()
+        return jsonify({'message': 'A category with this name already exists'}), 400
 
     logger.info('Category created', {'categoryId': category.id, 'name': name})
 
