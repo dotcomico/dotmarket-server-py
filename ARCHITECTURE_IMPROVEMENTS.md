@@ -165,8 +165,38 @@ with scattered `if not X: return jsonify(...), 400`.
 Not urgent at current data volume, but worth doing while touching this file
 in Step 6/8 anyway.
 
-- [ ] Replace the per-node recursive queries with a single query that loads
-      all categories once and builds the tree/ancestry in memory.
+- [x] Replace the per-node recursive queries with a single query that loads
+      all categories once and builds the tree/ancestry in memory. — Added
+      `src/utils/category_tree.py` (pure, no Flask/SQLAlchemy imports, so it
+      moves into `services/category_service.py` unchanged at Step 9) with
+      `build_forest`, `collect_subtree_ids`, `ancestry_chain`, `is_descendant`.
+- [x] Migrated **four** call sites, not the three listed above — the breadcrumb
+      loop in `getCategoryBySlug` is the same N+1 walking *up* the tree, and is
+      the "ancestry" half of this step's commit message:
+      - `getCategoryTree` — **61 queries → 1**
+      - `getProductsByCategory` (`getAllChildIds`) — 11 → 7
+      - `getCategoryBySlug` (breadcrumbs + `parent`) — 4 → 3 for a child;
+        a root skips the ancestry query entirely and stays at 2
+      - `updateCategory` (`is_descendant`) — now walks *up* from the proposed
+        parent (depth steps) instead of descending the whole subtree
+- [x] **Depth cap removed.** The old `depth < 2` in `build_tree` rendered only
+      3 levels, so a 4th level would have silently vanished from
+      `/api/categories/tree`. `build_forest` is unlimited by default;
+      `build_forest(rows, max_depth=2)` reproduces the old output byte-for-byte
+      if a cap is ever wanted again.
+- [x] Cycle safety: `collect_subtree_ids` and `ancestry_chain` guard against a
+      corrupt `parentId` cycle (the old unbounded versions would have hung).
+      `build_forest` needs no guard — `parentId` is single-valued, so a cycle
+      forms a component with no root, and the walk only starts from roots.
+
+**Verified:** old vs. new servers run side by side on two ports returned
+byte-identical JSON for `/tree`, root slug, child slug, and `/<slug>/products`;
+all 60 category pages return 200 with breadcrumbs; helper output matches the old
+logic for all 60 categories and all 3,600 `is_descendant` pairs. Write path
+re-tested: self-parent / cycle / missing-parent all still 400, legitimate
+re-parent and detach still 200. A temporary 5-level chain confirmed the tree now
+renders all 5 levels (old code showed 3) and that a 4-level-deep cycle is still
+rejected. Test data removed and the DB restored from a backup afterwards.
 
 **Commit:** `perf: build category tree/ancestry from a single query instead of N+1`
 

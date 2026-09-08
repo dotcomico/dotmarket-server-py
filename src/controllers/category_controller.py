@@ -8,6 +8,12 @@ from src.config.database import db
 from src.utils.logger import logger
 from src.utils.error_handler import handle_errors
 from src.utils.validators import required_string
+from src.utils.category_tree import (
+    build_forest,
+    collect_subtree_ids,
+    ancestry_chain,
+    is_descendant,
+)
 from src.middleware.multer import save_uploaded_file, delete_uploaded_file
 
 @handle_errors
@@ -108,16 +114,10 @@ def updateCategory(id):
             if new_parent_id == category.id:
                 return jsonify({'message': 'Category cannot be its own parent'}), 400
 
-            def is_descendant(parent_id, target_id):
-                children = Category.query.filter_by(parentId=parent_id).all()
-                for child in children:
-                    if child.id == target_id:
-                        return True
-                    if is_descendant(child.id, target_id):
-                        return True
-                return False
-
-            if is_descendant(category.id, new_parent_id):
+            # Walk up from the proposed parent instead of descending this
+            # category's entire subtree.
+            links = db.session.query(Category.id, Category.parentId).all()
+            if is_descendant(links, category.id, new_parent_id):
                 return jsonify({'message': 'Cannot set a subcategory as parent'}), 400
 
             # Verify parent exists
@@ -197,19 +197,9 @@ def deleteCategory(id):
 
 @handle_errors
 def getCategoryTree():
-    categories = Category.query.filter_by(parentId=None).all()
-    def build_tree(category, depth=0):
-        # Build tree - 2 levels for max
-        data = category.to_dict()
-        if depth < 2:
-            children = Category.query.filter_by(parentId=category.id).all()
-            data['children'] = [build_tree(child, depth + 1) for child in children]
-        else:
-            data['children'] = []
-        return data
-
-    result = [build_tree(cat) for cat in categories]
-    return jsonify(result)
+    # One query for the whole table; the tree is assembled in memory.
+    categories = Category.query.all()
+    return jsonify(build_forest(categories))
 
 @handle_errors
 def getAllCategories():
@@ -232,13 +222,9 @@ def getProductsByCategory(slug):
     if not category:
         return jsonify({'message': 'Category not found'}), 404
 
-    def getAllChildIds(cat_id):
-        ids = [cat_id]
-        children = Category.query.filter_by(parentId=cat_id).all()
-        for child in children:
-            ids.extend(getAllChildIds(child.id))
-        return ids
-    all_category_ids = getAllChildIds(category.id)
+    # id/parentId only — the subtree walk never needs the other columns.
+    links = db.session.query(Category.id, Category.parentId).all()
+    all_category_ids = collect_subtree_ids(links, category.id)
 
     query = Product.query.filter(Product.categoryId.in_(all_category_ids))
 
@@ -285,31 +271,32 @@ def getCategoryBySlug(slug):
 
     children = Category.query.filter_by(parentId=category.id).all()
 
-    # Build breadcrumb
-    breadcrumbs = []
-    current = category
-
-    while current:
-        breadcrumbs.insert(0, {
-            'id': current.id,
-            'name': current.name,
-            'slug': current.slug
-        })
-        if current.parentId:
-            current = Category.query.filter_by(id=current.parentId).first()
-        else:
-            current = None
+    # Build breadcrumb — one query up the whole ancestry instead of one per
+    # level. A root has no ancestry, so skip the query entirely.
+    if category.parentId is None:
+        ancestry = [category]
+    else:
+        links = db.session.query(
+            Category.id, Category.parentId, Category.name, Category.slug
+        ).all()
+        ancestry = ancestry_chain(links, category.id)
+    breadcrumbs = [
+        {'id': c.id, 'name': c.name, 'slug': c.slug}
+        for c in ancestry
+    ]
 
     result = category.to_dict()
     result['children'] = [
         {'id': c.id, 'name': c.name, 'slug': c.slug, 'icon': c.icon, 'image': c.image}
         for c in children
     ]
-    if category.parent:
+    # ancestry ends with `category` itself, so its parent is the entry before it.
+    if len(ancestry) > 1:
+        parent = ancestry[-2]
         result['parent'] = {
-            'id': category.parent.id,
-            'name': category.parent.name,
-            'slug': category.parent.slug
+            'id': parent.id,
+            'name': parent.name,
+            'slug': parent.slug
         }
     result['breadcrumbs'] = breadcrumbs
 
