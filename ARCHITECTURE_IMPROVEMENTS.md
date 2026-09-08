@@ -110,12 +110,18 @@ except Exception as error:
 `main.py` already has a global `@app.errorhandler(Exception)` — this
 boilerplate exists mainly to add the `logger.error` call.
 
-- [ ] Add one decorator (this is where `asyncHandler` from Step 3 gets reborn,
+- [x] Add one decorator (this is where `asyncHandler` from Step 3 gets reborn,
       if you chose to keep the file) that logs the exception and re-raises,
-      letting the global handler build the response.
-- [ ] Apply it to every controller function, removing the local `try/except`.
-- [ ] Confirm error responses (shape/status code) are unchanged by hitting a
-      few endpoints with bad input.
+      letting the global handler build the response. — `src/utils/error_handler.py::handle_errors`
+      (written fresh, not a revival of the deleted `asyncHandler`).
+- [x] Apply it to every controller function, removing the local `try/except`. —
+      Applied to all 26 controller functions. The only `except Exception` blocks
+      left in the controllers are three narrow guards around
+      `delete_uploaded_file` in `category_controller.py`, which are deliberate
+      (a failed image cleanup must not fail the request) — not leftovers.
+- [x] Confirm error responses (shape/status code) are unchanged by hitting a
+      few endpoints with bad input. — Follow-up fix in `507eb5b` corrected two
+      cases that were returning 500 instead of 400.
 
 **Commit:** `refactor: replace per-function try/except with shared error-logging decorator`
 
