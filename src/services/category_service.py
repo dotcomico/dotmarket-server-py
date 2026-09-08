@@ -1,12 +1,12 @@
 import re
-from flask import request, jsonify
+
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
+
 from src.models.Category import Category
 from src.models.Product import Product
 from src.config.database import db
 from src.utils.logger import logger
-from src.utils.error_handler import handle_errors
 from src.utils.validators import required_string
 from src.utils.category_tree import (
     build_forest,
@@ -16,33 +16,32 @@ from src.utils.category_tree import (
 )
 from src.middleware.multer import save_uploaded_file, delete_uploaded_file
 
-@handle_errors
-def createCategory():
-    if request.content_type and 'multipart/form-data' in request.content_type:
-        data = request.form.to_dict()
-    else:
-        data = request.get_json() or {}
 
+def create_category(data, image_file=None):
+    """Local (categories-specific). Returns (result, error).
+
+    `image_file` is the werkzeug `FileStorage` already pulled out of
+    `request.files` by the route (services stay flask.request-free).
+    """
     name = data.get('name')
     parentId = data.get('parentId')
     icon = data.get('icon')
 
     error = required_string(name, 'name', message='Category name is required')
     if error:
-        return jsonify({'message': error['msg']}), 400
+        return None, {'status': 400, 'message': error['msg']}
 
-    #image path
     image = None
-    if 'image' in request.files:
+    if image_file is not None:
         try:
-            image = save_uploaded_file(request.files['image'], 'categories')
+            image = save_uploaded_file(image_file, 'categories')
         except ValueError as e:
-            return jsonify({'error': str(e)}), 400
+            return None, {'status': 400, 'error': str(e)}
 
     try:
         parentId = int(parentId) if parentId else None
     except (ValueError, TypeError):
-        return jsonify({'message': 'Invalid parent category ID'}), 400
+        return None, {'status': 400, 'message': 'Invalid parent category ID'}
 
     category = Category(
         name=name.strip(),
@@ -54,36 +53,29 @@ def createCategory():
     try:
         db.session.add(category)
         db.session.commit()
-    except IntegrityError as e:
+    except IntegrityError:
         # e.g. a duplicate name -> duplicate auto-generated slug (unique constraint)
         db.session.rollback()
-        return jsonify({'message': 'A category with this name already exists'}), 400
+        return None, {'status': 400, 'message': 'A category with this name already exists'}
 
     logger.info('Category created', {'categoryId': category.id, 'name': name})
 
-    return jsonify(category.to_dict()), 201
+    return category.to_dict(), None
 
-@handle_errors
-def getCategoryById(id):
+
+def get_category_by_id(id):
+    """Local (categories-specific). Returns (result, error)."""
     category = Category.query.filter_by(id=id).first()
-
     if not category:
-        return jsonify({'message': 'Category not found'}), 404
+        return None, {'status': 404, 'message': 'Category not found'}
+    return category.to_dict(include_children=True), None
 
-    return jsonify(category.to_dict(include_children=True))
 
-@handle_errors
-def updateCategory(id):
+def update_category(id, data, image_file=None):
+    """Local (categories-specific). Returns (result, error)."""
     category = Category.query.filter_by(id=id).first()
-
     if not category:
-        return jsonify({'message': 'Category not found'}), 404
-
-    # Get data from form (multipart) or JSON
-    if request.content_type and 'multipart/form-data' in request.content_type:
-        data = request.form.to_dict()
-    else:
-        data = request.get_json() or {}
+        return None, {'status': 404, 'message': 'Category not found'}
 
     name = data.get('name')
     parentId = data.get('parentId')
@@ -93,7 +85,7 @@ def updateCategory(id):
     if name is not None:
         error = required_string(name, 'name', message='Category name cannot be empty')
         if error:
-            return jsonify({'message': error['msg']}), 400
+            return None, {'status': 400, 'message': error['msg']}
 
         category.name = name.strip()
 
@@ -103,75 +95,71 @@ def updateCategory(id):
         slug = re.sub(r'^-+|-+$', '', slug)
         category.slug = slug
 
-    # Validate parentId
     if parentId is not None:
         if parentId == '' or parentId == 'null':
             category.parentId = None
         else:
             new_parent_id = int(parentId)
 
-            # validatre parent not himself
             if new_parent_id == category.id:
-                return jsonify({'message': 'Category cannot be its own parent'}), 400
+                return None, {'status': 400, 'message': 'Category cannot be its own parent'}
 
             # Walk up from the proposed parent instead of descending this
             # category's entire subtree.
             links = db.session.query(Category.id, Category.parentId).all()
             if is_descendant(links, category.id, new_parent_id):
-                return jsonify({'message': 'Cannot set a subcategory as parent'}), 400
+                return None, {'status': 400, 'message': 'Cannot set a subcategory as parent'}
 
-            # Verify parent exists
             parent = Category.query.filter_by(id=new_parent_id).first()
             if not parent:
-                return jsonify({'message': 'Parent category not found'}), 400
+                return None, {'status': 400, 'message': 'Parent category not found'}
 
             category.parentId = new_parent_id
 
     if icon is not None:
         category.icon = icon.strip() if icon else None
 
-    if removeImage == 'true' or removeImage == True:
+    if removeImage == 'true' or removeImage is True:
         if category.image:
             try:
                 delete_uploaded_file(category.image)
             except Exception as e:
                 logger.warning('Failed to delete old image', {'error': str(e)})
         category.image = None
-    elif 'image' in request.files:
-        # Delete old image
+    elif image_file is not None:
         if category.image:
             try:
                 delete_uploaded_file(category.image)
             except Exception as e:
                 logger.warning('Failed to delete old image', {'error': str(e)})
 
-        # Save new image
         try:
-            category.image = save_uploaded_file(request.files['image'], 'categories')
+            category.image = save_uploaded_file(image_file, 'categories')
         except ValueError as e:
-            return jsonify({'error': str(e)}), 400
+            return None, {'status': 400, 'error': str(e)}
 
     db.session.commit()
 
     logger.info('Category updated', {'categoryId': category.id, 'name': category.name})
 
-    return jsonify({
+    return {
         'message': 'Category updated successfully',
         'category': category.to_dict()
-    })
+    }, None
 
-@handle_errors
-def deleteCategory(id):
+
+def delete_category(id):
+    """Local (categories-specific). Returns (result, error)."""
     category = Category.query.filter_by(id=id).first()
-
     if not category:
-        return jsonify({'message': 'Category not found'}), 404
+        return None, {'status': 404, 'message': 'Category not found'}
 
     children = Category.query.filter_by(parentId=id).first()
     if children:
-        return jsonify({
+        return None, {
+            'status': 400,
             'message': 'Cannot delete category with subcategories. Please delete or reassign subcategories first.'
-        }), 400
+        }
 
     products_count = Product.query.filter_by(categoryId=id).count()
 
@@ -179,7 +167,6 @@ def deleteCategory(id):
         Product.query.filter_by(categoryId=id).update({'categoryId': None})
         logger.info('Products uncategorized', {'count': products_count, 'categoryId': id})
 
-    # delete image
     if category.image:
         try:
             delete_uploaded_file(category.image)
@@ -190,37 +177,33 @@ def deleteCategory(id):
     db.session.delete(category)
     db.session.commit()
     logger.info('Category deleted', {'categoryId': id, 'name': category_name})
-    return jsonify({
+
+    return {
         'message': 'Category deleted successfully',
         'productsAffected': products_count
-    })
+    }, None
 
-@handle_errors
-def getCategoryTree():
-    # One query for the whole table; the tree is assembled in memory.
+
+def get_category_tree():
+    """Local (categories-specific). One query for the whole table; the tree
+    is assembled in memory (see utils/category_tree.py, Step 7)."""
     categories = Category.query.all()
-    return jsonify(build_forest(categories))
+    return build_forest(categories)
 
-@handle_errors
-def getAllCategories():
+
+def get_all_categories():
+    """Local (categories-specific)."""
     categories = Category.query.all()
-    result = [cat.to_dict(include_parent=True) for cat in categories]
-    return jsonify(result)
+    return [cat.to_dict(include_parent=True) for cat in categories]
 
-@handle_errors
-def getProductsByCategory(slug):
-    page = int(request.args.get('page', 1))
-    limit = min(int(request.args.get('limit', 20)), 100)
-    minPrice = request.args.get('minPrice')
-    maxPrice = request.args.get('maxPrice')
-    search = request.args.get('search')
 
+def get_products_by_category(slug, page=1, limit=20, minPrice=None, maxPrice=None, search=None):
+    """Local (categories-specific). Returns (result, error)."""
     offset = (page - 1) * limit
 
     category = Category.query.filter_by(slug=slug).first()
-
     if not category:
-        return jsonify({'message': 'Category not found'}), 404
+        return None, {'status': 404, 'message': 'Category not found'}
 
     # id/parentId only — the subtree walk never needs the other columns.
     links = db.session.query(Category.id, Category.parentId).all()
@@ -245,7 +228,7 @@ def getProductsByCategory(slug):
     total = query.count()
     products = query.offset(offset).limit(limit).all()
 
-    return jsonify({
+    return {
         'category': {
             'id': category.id,
             'name': category.name,
@@ -260,14 +243,14 @@ def getProductsByCategory(slug):
             'limit': limit,
             'totalPages': (total + limit - 1) // limit
         }
-    })
+    }, None
 
-@handle_errors
-def getCategoryBySlug(slug):
+
+def get_category_by_slug(slug):
+    """Local (categories-specific). Returns (result, error)."""
     category = Category.query.filter_by(slug=slug).first()
-
     if not category:
-        return jsonify({'message': 'Category not found'}), 404
+        return None, {'status': 404, 'message': 'Category not found'}
 
     children = Category.query.filter_by(parentId=category.id).all()
 
@@ -300,4 +283,4 @@ def getCategoryBySlug(slug):
         }
     result['breadcrumbs'] = breadcrumbs
 
-    return jsonify(result)
+    return result, None
