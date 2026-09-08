@@ -129,14 +129,23 @@ boilerplate exists mainly to add the `logger.error` call.
 etc.); `category_controller.py` and `order_controller.py` validate inline
 with scattered `if not X: return jsonify(...), 400`.
 
-- [ ] Create `utils/validators.py` with small composable helpers:
+- [x] Create `utils/validators.py` with small composable helpers:
       `required_string(value, field, min_len=None, max_len=None)`,
       `positive_number(value, field)`, `one_of(value, field, allowed)`, etc.
-      Each returns an error dict or `None`.
-- [ ] Migrate `auth_controller.validateRegister/validateLogin` and
+      Each returns an error dict or `None`. — Added `required_string`,
+      `max_length`, `valid_email`, `strong_password`, `positive_number`,
+      `one_of`, `required_list` in `src/utils/validators.py`.
+- [x] Migrate `auth_controller.validateRegister/validateLogin` and
       `product_controller.validateProduct` to use them.
-- [ ] Migrate the inline checks in `category_controller.py` /
-      `order_controller.py` to use them too.
+- [x] Migrate the inline checks in `category_controller.py` /
+      `order_controller.py` to use them too. — Category's required-name
+      checks and order's items/status checks now call the shared helpers,
+      unpacking `error['msg']` to keep their original
+      `{'message': ...}` response shape (only auth/product used the
+      `{'type','msg','path'}` field-errors list shape). Verified every
+      error-message branch matches the old duplicated code exactly via a
+      standalone script exercising all helpers; all controllers still
+      import cleanly.
 
 **Commit:** `refactor: introduce shared validation helpers, remove duplicated checks`
 
