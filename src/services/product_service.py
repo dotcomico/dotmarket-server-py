@@ -1,14 +1,13 @@
-from flask import request, jsonify
-from sqlalchemy import or_
 from src.models.Product import Product
 from src.models.Category import Category
 from src.config.database import db
 from src.utils.logger import logger
-from src.utils.error_handler import handle_errors
 from src.utils.validators import required_string, positive_number, max_length
 from src.middleware.multer import save_uploaded_file
 
-def validateProduct(data, files=None):
+
+def validateProduct(data):
+    """Local (products-specific). Returns a list of field-error dicts (empty if valid)."""
     errors = [
         required_string(data.get('name'), 'name', min_len=3, max_len=100),
         positive_number(data.get('price', 0), 'price'),
@@ -25,50 +24,29 @@ def validateProduct(data, files=None):
 
     return [e for e in errors if e]
 
-def handleValidationErrors(errors):
-    #Helper - check validation results
-    if errors:
-        return jsonify({
-            'message': 'Validation failed',
-            'errors': errors
-        }), 400
-    return None
 
-@handle_errors
-def getAllProducts():
-    # for search, filters, pagination
-    page = int(request.args.get('page', 1))
-    limit = min(int(request.args.get('limit', 10)), 100)
-    search = request.args.get('search')
-    categoryId = request.args.get('categoryId')
-    minPrice = request.args.get('minPrice')
-    maxPrice = request.args.get('maxPrice')
-
+def list_products(page=1, limit=10, search=None, categoryId=None, minPrice=None, maxPrice=None):
+    """Search/filter/paginate products. Local (products-specific)."""
     offset = (page - 1) * limit
 
     query = Product.query
 
-    # Search by name
     if search:
         query = query.filter(Product.name.ilike(f'%{search}%'))
 
-    # Filter by category
     if categoryId:
         query = query.filter(Product.categoryId == int(categoryId))
 
-    # Price range filter
     if minPrice:
         query = query.filter(Product.price >= float(minPrice))
     if maxPrice:
         query = query.filter(Product.price <= float(maxPrice))
 
-    # total count
     count = query.count()
 
-    # paginated results with category
     products = query.order_by(Product.createdAt.desc()).offset(offset).limit(limit).all()
 
-    return jsonify({
+    return {
         'products': [p.to_dict(include_category=True) for p in products],
         'pagination': {
             'total': count,
@@ -76,29 +54,27 @@ def getAllProducts():
             'limit': limit,
             'totalPages': (count + limit - 1) // limit if count > 0 else 0
         }
-    })
+    }
 
-@handle_errors
-def getProductById(id):
+
+def get_product_by_id(id):
+    """Local (products-specific). Returns (result, error)."""
     product = Product.query.filter_by(id=id).first()
-
     if not product:
-        return jsonify({'message': 'Product not found'}), 404
+        return None, {'status': 404, 'message': 'Product not found'}
+    return product.to_dict(include_category=True), None
 
-    return jsonify(product.to_dict(include_category=True))
 
-@handle_errors
-def createProduct():
-    # Get data from form (multipart) or JSON
-    if request.content_type and 'multipart/form-data' in request.content_type:
-        data = request.form.to_dict()
-    else:
-        data = request.get_json() or {}
+def create_product(data, image_file=None, image360_file=None):
+    """Create a product, optionally saving an image / 360 image.
 
+    Local (products-specific). `image_file`/`image360_file` are the
+    werkzeug `FileStorage` objects already pulled out of `request.files` by
+    the route (services stay flask.request-free). Returns (result, error).
+    """
     errors = validateProduct(data)
-    validation_error = handleValidationErrors(errors)
-    if validation_error:
-        return validation_error
+    if errors:
+        return None, {'status': 400, 'message': 'Validation failed', 'errors': errors}
 
     name = data.get('name', '').strip()
     categoryId = int(data.get('categoryId'))
@@ -106,28 +82,25 @@ def createProduct():
     price = float(data.get('price'))
     stock = int(data.get('stock', 0))
 
-    # Verify category
     category = Category.query.filter_by(id=categoryId).first()
     if not category:
-        return jsonify({'message': 'Invalid category ID'}), 400
+        return None, {'status': 400, 'message': 'Invalid category ID'}
 
-    #  image uploads
     image = None
     image360 = None
 
-    if 'image' in request.files:
+    if image_file is not None:
         try:
-            image = save_uploaded_file(request.files['image'])
+            image = save_uploaded_file(image_file)
         except ValueError as e:
-            return jsonify({'message': str(e)}), 400
+            return None, {'status': 400, 'message': str(e)}
 
-    if 'image360' in request.files:
+    if image360_file is not None:
         try:
-            image360 = save_uploaded_file(request.files['image360'])
+            image360 = save_uploaded_file(image360_file)
         except ValueError as e:
-            return jsonify({'message': str(e)}), 400
+            return None, {'status': 400, 'message': str(e)}
 
-    # Create product
     newProduct = Product(
         name=name,
         categoryId=categoryId,
@@ -143,39 +116,30 @@ def createProduct():
 
     logger.info('Product created', {'productId': newProduct.id, 'name': name})
 
-    return jsonify({
+    return {
         'message': 'Product created successfully',
         'product': newProduct.to_dict(include_category=True)
-    }), 201
+    }, None
 
-@handle_errors
-def updateProduct(id):
+
+def update_product(id, data, image_file=None, image360_file=None,
+                    removeImage=None, removeImage360=None):
+    """Local (products-specific). Returns (result, error)."""
     product = Product.query.filter_by(id=id).first()
-
     if not product:
-        return jsonify({'message': 'Product not found'}), 404
-
-    # Get data from form (multipart) or JSON
-    if request.content_type and 'multipart/form-data' in request.content_type:
-        data = request.form.to_dict()
-    else:
-        data = request.get_json() or {}
+        return None, {'status': 404, 'message': 'Product not found'}
 
     name = data.get('name')
     categoryId = data.get('categoryId')
     description = data.get('description')
     price = data.get('price')
     stock = data.get('stock')
-    removeImage = data.get('removeImage')
-    removeImage360 = data.get('removeImage360')
 
-    # Verify category if being updated
     if categoryId:
         category = Category.query.filter_by(id=int(categoryId)).first()
         if not category:
-            return jsonify({'message': 'Invalid category ID'}), 400
+            return None, {'status': 400, 'message': 'Invalid category ID'}
 
-    # Update fields
     if name:
         product.name = name.strip()
     if categoryId:
@@ -187,37 +151,35 @@ def updateProduct(id):
     if stock is not None:
         product.stock = int(stock)
 
-    # Handle main image
-    if 'image' in request.files:
+    if image_file is not None:
         try:
-            product.image = save_uploaded_file(request.files['image'])
+            product.image = save_uploaded_file(image_file)
         except ValueError as e:
-            return jsonify({'message': str(e)}), 400
+            return None, {'status': 400, 'message': str(e)}
     elif removeImage == 'true':
         product.image = None
 
-    # Handle 360 image
-    if 'image360' in request.files:
+    if image360_file is not None:
         try:
-            product.image360 = save_uploaded_file(request.files['image360'])
+            product.image360 = save_uploaded_file(image360_file)
         except ValueError as e:
-            return jsonify({'message': str(e)}), 400
+            return None, {'status': 400, 'message': str(e)}
     elif removeImage360 == 'true':
         product.image360 = None
 
     db.session.commit()
 
-    return jsonify({
+    return {
         'message': 'Product updated successfully',
         'product': product.to_dict(include_category=True)
-    })
+    }, None
 
-@handle_errors
-def deleteProduct(id):
+
+def delete_product(id):
+    """Local (products-specific). Returns (result, error)."""
     product = Product.query.filter_by(id=id).first()
-
     if not product:
-        return jsonify({'message': 'Product not found'}), 404
+        return None, {'status': 404, 'message': 'Product not found'}
 
     productId = product.id
     db.session.delete(product)
@@ -225,7 +187,7 @@ def deleteProduct(id):
 
     logger.info('Product deleted', {'productId': productId})
 
-    return jsonify({
+    return {
         'message': 'Product deleted successfully',
         'deletedId': str(id)
-    })
+    }, None
