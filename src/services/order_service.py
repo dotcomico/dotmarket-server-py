@@ -1,73 +1,71 @@
-from flask import request, jsonify, g
 from src.models.Order import Order
 from src.models.OrderItem import OrderItem
 from src.models.Product import Product
-from src.models.User import User
 from src.config.database import db
 from src.config.constants import ROLES, ORDER_STATUS
 from src.utils.logger import logger
-from src.utils.error_handler import handle_errors
 from src.utils.validators import required_list, one_of
 
-@handle_errors
-def getAllOrders():
-    # Admin sees all, Customers see only their own
-    if g.user['role'] == ROLES['ADMIN'] or g.user['role'] == ROLES['MANAGER']:
+
+def list_orders_for_user(user_id, role):
+    """Local (orders-specific). Admin/Manager see all orders; customers get []
+    here (their own orders come from list_own_orders instead)."""
+    if role == ROLES['ADMIN'] or role == ROLES['MANAGER']:
         orders = Order.query.order_by(Order.createdAt.desc()).all()
-        return jsonify([o.to_dict(include_user=True, include_products=True) for o in orders])
+        return [o.to_dict(include_user=True, include_products=True) for o in orders]
 
-    # For customers
-    return jsonify([])
+    return []
 
-# loged in users - only there own
-@handle_errors
-def getAllUserOrders():
-    orders = Order.query.filter_by(UserId=g.user['id']).order_by(Order.createdAt.desc()).all()
-    return jsonify([o.to_dict(include_products=True) for o in orders])
 
-@handle_errors
-def getOrderById(id):
-    order = Order.query.filter_by(id=id).first()
+def list_own_orders(user_id):
+    """Local (orders-specific). Logged-in user's own orders."""
+    orders = Order.query.filter_by(UserId=user_id).order_by(Order.createdAt.desc()).all()
+    return [o.to_dict(include_products=True) for o in orders]
+
+
+def get_order_by_id(order_id, user_id, role):
+    """Local (orders-specific). Returns (result, error)."""
+    order = Order.query.filter_by(id=order_id).first()
 
     if not order:
-        return jsonify({'message': 'Order not found'}), 404
+        return None, {'status': 404, 'message': 'Order not found'}
 
-    # Check permissions
-    if (g.user['role'] != ROLES['ADMIN'] and
-        g.user['role'] != ROLES['MANAGER'] and
-        order.UserId != g.user['id']):
-        return jsonify({'message': 'Access denied'}), 403
+    if role != ROLES['ADMIN'] and role != ROLES['MANAGER'] and order.UserId != user_id:
+        return None, {'status': 403, 'message': 'Access denied'}
 
-    return jsonify(order.to_dict(include_user=True, include_products=True))
+    return order.to_dict(include_user=True, include_products=True), None
 
-@handle_errors
-def createOrder():
-     # use for Checkout
-    data = request.get_json()
-    items = data.get('items', [])
-    address = data.get('address')
 
+def create_order(user_id, items, address):
+    """Checkout. Local (orders-specific). Returns (result, error).
+
+    Validate-then-mutate: every item is checked (existence + stock) before
+    any DB write happens, so a bad item later in the list never leaves an
+    earlier item's stock partially decremented. Do not merge the two phases.
+    """
     error = required_list(items, 'items', message='Order must contain at least one item')
     if error:
-        return jsonify({'message': error['msg']}), 400
+        return None, {'status': 400, 'message': error['msg']}
 
     totalAmount = 0
     orderItems = []
     productsToUpdate = []
 
-    # Validate products and calculate total price
+    # Phase 1: validate every item and compute total — no DB writes yet
     for item in items:
         product = Product.query.filter_by(id=item.get('productId')).first()
 
         if not product:
-            return jsonify({
+            return None, {
+                'status': 404,
                 'message': f"Product with ID {item.get('productId')} not found"
-            }), 404
+            }
 
         if product.stock < item.get('quantity', 0):
-            return jsonify({
+            return None, {
+                'status': 400,
                 'message': f"Insufficient stock for {product.name}. Available: {product.stock}"
-            }), 400
+            }
 
         totalAmount += product.price * item.get('quantity')
 
@@ -82,8 +80,9 @@ def createOrder():
             'newStock': product.stock - item.get('quantity')
         })
 
+    # Phase 2: all items validated — now write
     order = Order(
-        UserId=g.user['id'],
+        UserId=user_id,
         totalAmount=totalAmount,
         address=address,
         status=ORDER_STATUS['PENDING']
@@ -92,7 +91,6 @@ def createOrder():
     db.session.add(order)
     db.session.flush()
 
-    # order items with OrderId
     for item in orderItems:
         orderItem = OrderItem(
             OrderId=order.id,
@@ -102,58 +100,52 @@ def createOrder():
         )
         db.session.add(orderItem)
 
-    # Update product stock
     for item in productsToUpdate:
         item['product'].stock = item['newStock']
 
     db.session.commit()
 
-    logger.info('Order created', {'orderId': order.id, 'userId': g.user['id'], 'total': totalAmount})
+    logger.info('Order created', {'orderId': order.id, 'userId': user_id, 'total': totalAmount})
 
-    # Fetch complete order with products
     completeOrder = Order.query.filter_by(id=order.id).first()
 
-    return jsonify({
+    return {
         'message': 'Order created successfully',
         'order': completeOrder.to_dict(include_products=True)
-    }), 201
+    }, None
 
-@handle_errors
-def updateOrderStatus(id):
-   # Protected - Admin/Manager
-    data = request.get_json()
-    status = data.get('status')
 
+def update_order_status(order_id, status):
+    """Local (orders-specific). Returns (result, error)."""
     error = one_of(status, 'status', ORDER_STATUS.values(), message='Invalid order status')
     if error:
-        return jsonify({'message': error['msg']}), 400
+        return None, {'status': 400, 'message': error['msg']}
 
-    order = Order.query.filter_by(id=id).first()
+    order = Order.query.filter_by(id=order_id).first()
 
     if not order:
-        return jsonify({'message': 'Order not found'}), 404
+        return None, {'status': 404, 'message': 'Order not found'}
 
     order.status = status
     db.session.commit()
 
     updatedOrder = Order.query.filter_by(id=order.id).first()
 
-    return jsonify({
+    return {
         'message': 'Order status updated successfully',
         'order': updatedOrder.to_dict(include_user=True, include_products=True)
-    })
+    }, None
 
-@handle_errors
-def deleteOrder(id):
-    # Protected - Admin only
-    order = Order.query.filter_by(id=id).first()
+
+def delete_order(order_id):
+    """Local (orders-specific). Returns (result, error)."""
+    order = Order.query.filter_by(id=order_id).first()
 
     if not order:
-        return jsonify({'message': 'Order not found'}), 404
+        return None, {'status': 404, 'message': 'Order not found'}
 
-    # Delete order items first
     OrderItem.query.filter_by(OrderId=order.id).delete()
     db.session.delete(order)
     db.session.commit()
 
-    return jsonify({'message': 'Order deleted successfully'})
+    return {'message': 'Order deleted successfully'}, None

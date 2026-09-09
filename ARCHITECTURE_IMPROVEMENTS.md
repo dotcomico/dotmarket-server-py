@@ -291,12 +291,40 @@ running Flask app.
       behavior-preserving by design; worth flagging as cleanup for a future
       pass. Temp admin user and temp categories created for testing were
       deleted afterward.
-- [ ] Order of resources (simplest data flow first):
+- [x] Order of resources (simplest data flow first):
       1. [x] `users` (smallest, 3 endpoints) — done, see above
       2. [x] `auth` (register/login/me — self-contained) — done, see above
       3. [x] `products` (CRUD + filters, no cross-resource logic) — done, see below
       4. [x] `categories` (recursive tree logic — benefits from Step 7 being done first) — done, see below
-      5. [ ] `orders` (most business-critical — stock decrement + transaction — do last, with the most care)
+      5. [x] `orders` (most business-critical — stock decrement + transaction — do last, with the most care) — done,
+             see below
+
+`src/services/order_service.py` added, `src/controllers/order_controller.py` deleted,
+`routes/orders.py` now parses `request`/`g.user` → calls the service → `jsonify(...)`s
+the result, with `@handle_errors` moved onto the route functions (same pattern as the
+other four resources). Errors follow the `{'status', 'message'}` convention used by
+`user_service`/`auth_service`/`product_service` (not `category_service`'s inconsistent
+`'message'`/`'error'` mix). `create_order`'s validate-then-mutate two-loop structure —
+every item checked for existence/stock *before* any DB write — was moved verbatim,
+along with the `db.session.flush()` (needed for `order.id` before creating
+`OrderItem`s) and the single end-of-function `commit()`.
+
+Re-tested live against the real seeded data (admin/manager/customer accounts) with a
+DB backup taken first and restored afterward:
+`GET /orders` as admin (all orders, `include_user`+`include_products`) vs. as customer
+(`[]`); `GET /orders/privet` (own orders only); `GET /orders/<id>` for own order (200),
+another customer's order (403 — used a temporary second customer account to prove
+this, since all 5 seeded orders belonged to the same customer), and a missing id (404);
+`POST /orders` (checkout) with empty items (400), a bad `productId` (404), and —
+the check specific to this step — an order where an **earlier** item is valid and a
+**later** item has insufficient stock: confirmed 400 *and* that the earlier valid
+item's `Product.stock` was untouched, proving the validate-before-mutate ordering
+survived the extraction; then a fully valid 2-item checkout (201, correct `totalAmount`,
+correct stock decrements for both items); `PUT /orders/<id>` status update with an
+invalid status (400), missing order (404), and a valid update (200); `DELETE
+/orders/<id>` (200, re-delete → 404) with `OrderItem` rows confirmed gone. The
+temporary second customer, the test order, and the stock decrements were all undone
+by restoring the DB from the pre-test backup afterward.
 
 **Commit (per resource):** `refactor: extract product_service from product routes`
 (repeat for auth, categories, orders — orders last)
