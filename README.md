@@ -84,10 +84,10 @@ Server runs at: http://localhost:3000
 backend-py/
 ├── src/
 │   ├── config/        # Database config
-│   ├── controllers/   # Request handlers
 │   ├── middleware/    # Auth, errors
 │   ├── models/        # Database models
-│   ├── routes/        # API routes
+│   ├── routes/        # API routes (HTTP shaping)
+│   ├── services/      # Business logic
 │   ├── utils/         # Helpers
 │   └── main.py        # Entry point
 ├── public/uploads/    # Product images
