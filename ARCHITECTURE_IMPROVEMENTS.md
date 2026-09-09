@@ -110,12 +110,18 @@ except Exception as error:
 `main.py` already has a global `@app.errorhandler(Exception)` — this
 boilerplate exists mainly to add the `logger.error` call.
 
-- [ ] Add one decorator (this is where `asyncHandler` from Step 3 gets reborn,
+- [x] Add one decorator (this is where `asyncHandler` from Step 3 gets reborn,
       if you chose to keep the file) that logs the exception and re-raises,
-      letting the global handler build the response.
-- [ ] Apply it to every controller function, removing the local `try/except`.
-- [ ] Confirm error responses (shape/status code) are unchanged by hitting a
-      few endpoints with bad input.
+      letting the global handler build the response. — `src/utils/error_handler.py::handle_errors`
+      (written fresh, not a revival of the deleted `asyncHandler`).
+- [x] Apply it to every controller function, removing the local `try/except`. —
+      Applied to all 26 controller functions. The only `except Exception` blocks
+      left in the controllers are three narrow guards around
+      `delete_uploaded_file` in `category_controller.py`, which are deliberate
+      (a failed image cleanup must not fail the request) — not leftovers.
+- [x] Confirm error responses (shape/status code) are unchanged by hitting a
+      few endpoints with bad input. — Follow-up fix in `507eb5b` corrected two
+      cases that were returning 500 instead of 400.
 
 **Commit:** `refactor: replace per-function try/except with shared error-logging decorator`
 
@@ -129,14 +135,23 @@ boilerplate exists mainly to add the `logger.error` call.
 etc.); `category_controller.py` and `order_controller.py` validate inline
 with scattered `if not X: return jsonify(...), 400`.
 
-- [ ] Create `utils/validators.py` with small composable helpers:
+- [x] Create `utils/validators.py` with small composable helpers:
       `required_string(value, field, min_len=None, max_len=None)`,
       `positive_number(value, field)`, `one_of(value, field, allowed)`, etc.
-      Each returns an error dict or `None`.
-- [ ] Migrate `auth_controller.validateRegister/validateLogin` and
+      Each returns an error dict or `None`. — Added `required_string`,
+      `max_length`, `valid_email`, `strong_password`, `positive_number`,
+      `one_of`, `required_list` in `src/utils/validators.py`.
+- [x] Migrate `auth_controller.validateRegister/validateLogin` and
       `product_controller.validateProduct` to use them.
-- [ ] Migrate the inline checks in `category_controller.py` /
-      `order_controller.py` to use them too.
+- [x] Migrate the inline checks in `category_controller.py` /
+      `order_controller.py` to use them too. — Category's required-name
+      checks and order's items/status checks now call the shared helpers,
+      unpacking `error['msg']` to keep their original
+      `{'message': ...}` response shape (only auth/product used the
+      `{'type','msg','path'}` field-errors list shape). Verified every
+      error-message branch matches the old duplicated code exactly via a
+      standalone script exercising all helpers; all controllers still
+      import cleanly.
 
 **Commit:** `refactor: introduce shared validation helpers, remove duplicated checks`
 
@@ -150,29 +165,59 @@ with scattered `if not X: return jsonify(...), 400`.
 Not urgent at current data volume, but worth doing while touching this file
 in Step 6/8 anyway.
 
-- [ ] Replace the per-node recursive queries with a single query that loads
-      all categories once and builds the tree/ancestry in memory.
+- [x] Replace the per-node recursive queries with a single query that loads
+      all categories once and builds the tree/ancestry in memory. — Added
+      `src/utils/category_tree.py` (pure, no Flask/SQLAlchemy imports, so it
+      moves into `services/category_service.py` unchanged at Step 9) with
+      `build_forest`, `collect_subtree_ids`, `ancestry_chain`, `is_descendant`.
+- [x] Migrated **four** call sites, not the three listed above — the breadcrumb
+      loop in `getCategoryBySlug` is the same N+1 walking *up* the tree, and is
+      the "ancestry" half of this step's commit message:
+      - `getCategoryTree` — **61 queries → 1**
+      - `getProductsByCategory` (`getAllChildIds`) — 11 → 7
+      - `getCategoryBySlug` (breadcrumbs + `parent`) — 4 → 3 for a child;
+        a root skips the ancestry query entirely and stays at 2
+      - `updateCategory` (`is_descendant`) — now walks *up* from the proposed
+        parent (depth steps) instead of descending the whole subtree
+- [x] **Depth cap removed.** The old `depth < 2` in `build_tree` rendered only
+      3 levels, so a 4th level would have silently vanished from
+      `/api/categories/tree`. `build_forest` is unlimited by default;
+      `build_forest(rows, max_depth=2)` reproduces the old output byte-for-byte
+      if a cap is ever wanted again.
+- [x] Cycle safety: `collect_subtree_ids` and `ancestry_chain` guard against a
+      corrupt `parentId` cycle (the old unbounded versions would have hung).
+      `build_forest` needs no guard — `parentId` is single-valued, so a cycle
+      forms a component with no root, and the walk only starts from roots.
+
+**Verified:** old vs. new servers run side by side on two ports returned
+byte-identical JSON for `/tree`, root slug, child slug, and `/<slug>/products`;
+all 60 category pages return 200 with breadcrumbs; helper output matches the old
+logic for all 60 categories and all 3,600 `is_descendant` pairs. Write path
+re-tested: self-parent / cycle / missing-parent all still 400, legitimate
+re-parent and detach still 200. A temporary 5-level chain confirmed the tree now
+renders all 5 levels (old code showed 3) and that a 4-level-deep cycle is still
+rejected. Test data removed and the DB restored from a backup afterwards.
 
 **Commit:** `perf: build category tree/ancestry from a single query instead of N+1`
 
 ---
 
-## Step 8 — Collapse the routes-as-pure-passthrough layer
+## Step 8 — ~~Collapse the routes-as-pure-passthrough layer~~ SKIPPED, by decision
 **Size: medium (~1-2 hrs) | Risk: low (mechanical, one resource at a time)**
 
-Every function in `routes/*.py` currently just forwards to a controller
-function with identical arguments — it's a layer that adds no behavior.
+Considered and deliberately skipped. Collapsing route+controller into one
+file first would have meant temporarily dumping a controller's full body
+(validation + DB queries + response shaping) into the route file — e.g.
+`routes/products.py` would balloon from ~40 lines to ~500 — only to split
+it apart again one step later in Step 9 along the real route/service seam.
+That's a real, if temporary, readability cost for no lasting benefit, since
+Step 9 was always going to touch every one of these files anyway.
 
-- [ ] Do this one resource at a time (`products` first, as a template).
-- [ ] Either (a) register controller functions directly as blueprint view
-      functions, or (b) move the controller logic straight into the route file.
-      Prefer (b), since Step 9 will pull the actual logic out into services
-      anyway — so this step is really "delete the redundant middle file" per resource.
-- [ ] Re-test each resource's endpoints after collapsing it, before moving to
-      the next resource.
+Decision: go straight from the current controller-does-everything shape to
+Step 9's route → service split, skipping the intermediate collapsed-file
+state entirely.
 
-**Commit (per resource):** `refactor: collapse products route/controller passthrough`
-(repeat for categories, orders, users, auth)
+---
 
 ---
 
@@ -184,26 +229,102 @@ request-parsing, validation, DB queries, business rules, and response
 shaping in one function, which makes them impossible to unit-test without a
 running Flask app.
 
-- [ ] Create `services/` with one file per resource:
+- [x] Create `services/` with one file per resource:
       `product_service.py`, `category_service.py`, `order_service.py`,
       `user_service.py` (auth logic can fold into `user_service.py` or stay
-      separate as `auth_service.py`).
-- [ ] Move DB queries + business rules out of each route file into the
+      separate as `auth_service.py`).  — `src/services/user_service.py` and
+      `src/services/auth_service.py` added so far (products/categories/orders
+      still pending below).
+- [x] Move DB queries + business rules out of each route file into the
       matching service function. Services take plain arguments and return
       plain dicts/model instances — **no `flask.request` / `jsonify` inside
-      services.**
-- [ ] The route function becomes: parse `request` → call service → shape
-      response with `jsonify(...)`.
-- [ ] Do this **one resource at a time**, fully re-testing each resource
+      services.** — done for `users`; `update_user_role` returns
+      `(result, error)` with `error = {'status', 'message'}` so the route
+      can pick the HTTP status without the service touching Flask. `auth`
+      follows the same shape, plus an optional `errors` list for
+      field-level validation failures (register/login keep their existing
+      `{'type','msg','path'}` shape from Step 6's validators).
+- [x] The route function becomes: parse `request` → call service → shape
+      response with `jsonify(...)`. — done for all 3 endpoints in
+      `routes/users.py` (`/profile`, `GET /`, `PUT /<id>/role`) and all 3 in
+      `routes/auth.py` (`/register`, `/login`, `/me`); `auth.py` keeps a
+      small `_error_response()` helper to avoid repeating the
+      error-dict-to-jsonify mapping 3 times. `controllers/auth_controller.py`
+      deleted (fully replaced by `services/auth_service.py`). The
+      `@handle_errors` decorator (Step 5) moved from the old controller
+      functions onto the route functions — it's HTTP-boilerplate (rollback +
+      logging + 500 shape), so it belongs at the route layer, not inside a
+      Flask-free service.
+- [x] Do this **one resource at a time**, fully re-testing each resource
       (register/login, products CRUD, categories CRUD + tree, orders
       checkout flow) before starting the next, since this is the step most
-      likely to introduce a subtle behavior change.
-- [ ] Order of resources (simplest data flow first):
-      1. `users` (smallest, 3 endpoints)
-      2. `auth` (register/login/me — self-contained)
-      3. `products` (CRUD + filters, no cross-resource logic)
-      4. `categories` (recursive tree logic — benefits from Step 7 being done first)
-      5. `orders` (most business-critical — stock decrement + transaction — do last, with the most care)
+      likely to introduce a subtle behavior change. — `users` re-tested live
+      (profile, list, invalid role → 400, missing user → 404, legit
+      update round-trip → 200); `auth` re-tested live (login success/wrong
+      password/missing field, register success/duplicate-email/validation
+      errors, `/me` with and without a token) — all byte-identical to
+      before. Test user created during `auth` testing was deleted afterward.
+      `products` re-tested live (list/paginate, get-by-id, get-404,
+      unauthenticated create → 401, create validation errors → 400, invalid
+      categoryId → 400, valid create → 201, partial update → 200, update-404,
+      delete → 200, delete-again → 404) — all byte-identical to before.
+      `src/services/product_service.py` added, `src/controllers/product_controller.py`
+      deleted, `routes/products.py` now parses `request`/multipart-vs-JSON →
+      calls the service → `jsonify(...)`s the result, with `@handle_errors`
+      moved onto the route functions (same pattern as `auth.py`). Image
+      uploads stay Flask-free in the service by having the route pull the
+      `FileStorage` objects out of `request.files` and pass them in as plain
+      arguments. Temp admin user and temp product created for testing were
+      deleted afterward.
+      `categories` re-tested live (tree, list-all, get-by-slug, slug-404,
+      products-by-category, create validation error, invalid parentId, valid
+      create, duplicate-name → 400, child create, get-by-id auth-required,
+      update self-as-parent → 400, update cycle-as-parent → 400, update
+      missing-parent → 400, update rename/icon → 200, delete-with-children →
+      400, delete → 200, delete-again → 404) — all byte-identical to before.
+      `src/services/category_service.py` added (reuses `utils/category_tree.py`
+      from Step 7 unchanged), `src/controllers/category_controller.py`
+      deleted, `routes/categories.py` follows the same route-parses/
+      calls-service/jsonify's-result shape. Kept the pre-existing quirk that
+      an error body uses `'error'` (not `'message'`) as the key specifically
+      for a failed image upload — not unified here, since Step 9 is
+      behavior-preserving by design; worth flagging as cleanup for a future
+      pass. Temp admin user and temp categories created for testing were
+      deleted afterward.
+- [x] Order of resources (simplest data flow first):
+      1. [x] `users` (smallest, 3 endpoints) — done, see above
+      2. [x] `auth` (register/login/me — self-contained) — done, see above
+      3. [x] `products` (CRUD + filters, no cross-resource logic) — done, see below
+      4. [x] `categories` (recursive tree logic — benefits from Step 7 being done first) — done, see below
+      5. [x] `orders` (most business-critical — stock decrement + transaction — do last, with the most care) — done,
+             see below
+
+`src/services/order_service.py` added, `src/controllers/order_controller.py` deleted,
+`routes/orders.py` now parses `request`/`g.user` → calls the service → `jsonify(...)`s
+the result, with `@handle_errors` moved onto the route functions (same pattern as the
+other four resources). Errors follow the `{'status', 'message'}` convention used by
+`user_service`/`auth_service`/`product_service` (not `category_service`'s inconsistent
+`'message'`/`'error'` mix). `create_order`'s validate-then-mutate two-loop structure —
+every item checked for existence/stock *before* any DB write — was moved verbatim,
+along with the `db.session.flush()` (needed for `order.id` before creating
+`OrderItem`s) and the single end-of-function `commit()`.
+
+Re-tested live against the real seeded data (admin/manager/customer accounts) with a
+DB backup taken first and restored afterward:
+`GET /orders` as admin (all orders, `include_user`+`include_products`) vs. as customer
+(`[]`); `GET /orders/privet` (own orders only); `GET /orders/<id>` for own order (200),
+another customer's order (403 — used a temporary second customer account to prove
+this, since all 5 seeded orders belonged to the same customer), and a missing id (404);
+`POST /orders` (checkout) with empty items (400), a bad `productId` (404), and —
+the check specific to this step — an order where an **earlier** item is valid and a
+**later** item has insufficient stock: confirmed 400 *and* that the earlier valid
+item's `Product.stock` was untouched, proving the validate-before-mutate ordering
+survived the extraction; then a fully valid 2-item checkout (201, correct `totalAmount`,
+correct stock decrements for both items); `PUT /orders/<id>` status update with an
+invalid status (400), missing order (404), and a valid update (200); `DELETE
+/orders/<id>` (200, re-delete → 404) with `OrderItem` rows confirmed gone. The
+temporary second customer, the test order, and the stock decrements were all undone
+by restoring the DB from the pre-test backup afterward.
 
 **Commit (per resource):** `refactor: extract product_service from product routes`
 (repeat for auth, categories, orders — orders last)

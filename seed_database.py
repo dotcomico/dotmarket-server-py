@@ -325,8 +325,8 @@ PRODUCTS = [
         "price": 2.49,
         "stock": 120,
         "categoryId": 14,
-        "image": None,
-        "image360": None
+        "image": "/uploads/1770118479222.png",
+        "image360": "/uploads/1770118479230.gif"
     },
     {
         "name": "Fresh Broccoli",
@@ -334,8 +334,8 @@ PRODUCTS = [
         "price": 2.99,
         "stock": 80,
         "categoryId": 14,
-        "image": None,
-        "image360": None
+        "image": "/uploads/1770118503393.png",
+        "image360": "/uploads/1770118503401.gif"
     },
     {
         "name": "Red Bell Peppers (3-pack)",
@@ -343,10 +343,10 @@ PRODUCTS = [
         "price": 4.99,
         "stock": 5,  # LOW STOCK
         "categoryId": 14,
-        "image": None,
-        "image360": None
+        "image": "/uploads/1770118604977.png",
+        "image360": "/uploads/1770118604984.gif"
     },
-    
+
     # Dried Fruits & Nuts (15)
     {
         "name": "Roasted Almonds (12oz)",
@@ -354,8 +354,8 @@ PRODUCTS = [
         "price": 8.99,
         "stock": 65,
         "categoryId": 15,
-        "image": None,
-        "image360": None
+        "image": "/uploads/1770118658734.png",
+        "image360": "/uploads/1770118658742.gif"
     },
     {
         "name": "Dried Mango Slices",
@@ -363,10 +363,10 @@ PRODUCTS = [
         "price": 5.99,
         "stock": 40,
         "categoryId": 15,
-        "image": None,
-        "image360": None
+        "image": "/uploads/1770118691792.png",
+        "image360": "/uploads/1770118691799.gif"
     },
-    
+
     # Chicken (18)
     {
         "name": "Free-Range Chicken Breast (2-pack)",
@@ -374,8 +374,8 @@ PRODUCTS = [
         "price": 12.99,
         "stock": 55,
         "categoryId": 18,
-        "image": None,
-        "image360": None
+        "image": "/uploads/1770118751901.png",
+        "image360": "/uploads/1770118751908.gif"
     },
     {
         "name": "Organic Whole Chicken",
@@ -383,8 +383,8 @@ PRODUCTS = [
         "price": 18.99,
         "stock": 20,
         "categoryId": 18,
-        "image": None,
-        "image360": None
+        "image": "/uploads/1770118824041.png",
+        "image360": "/uploads/1770118824048.gif"
     },
     
     # Shellfish (22)
@@ -826,7 +826,7 @@ PRODUCTS = [
 
     # Dish Care (52)
     {
-        "name": "Ocean Fresh Ultra-Clean® Dishwasher Detergent Gel",
+        "name": "Ocean Fresh Ultra-Clean™ Dishwasher Detergent Gel",
         "description": "Concentrated Deep Clean Formula | Streak-Free Shine | Easy-Dose Bottle\n\nBring the purifying power of the sea to your kitchen with Ocean Fresh Ultra-Clean® Dishwasher Detergent Gel. This high-performance liquid detergent is specifically engineered to tackle the toughest kitchen challenges, from dried-on proteins to stubborn grease.\n\nSpotless Technology: Formulated to prevent water spots and filming on glassware.\nRapid Dissolve: Optimized for both heavy-duty and eco-friendly short cycles.\nMachine Care: Helps prevent limescale buildup, extending the life of your dishwasher.",
         "price": 12.90,
         "stock": 700,
