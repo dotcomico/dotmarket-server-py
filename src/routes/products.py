@@ -36,6 +36,17 @@ def get_all_products_route():
     )
     return jsonify(result)
 
+# Protected - Admin / Manager
+# Declared before the '/<int:id>' rule so a literal path segment is never
+# swallowed by the id rule (the int converter would not match 'stats' anyway,
+# but the ordering keeps that guarantee explicit).
+@products_bp.route('/stats', methods=['GET'])
+@auth
+@checkRole(ROLES['ADMIN'], ROLES['MANAGER'])
+@handle_errors
+def get_product_stats_route():
+    return jsonify(product_service.get_product_stats())
+
 @products_bp.route('/<int:id>', methods=['GET'])
 @handle_errors
 def get_product_by_id_route(id):

@@ -1,5 +1,8 @@
+from sqlalchemy import case, func
+
 from src.models.Product import Product
 from src.models.Category import Category
+from src.config.constants import LOW_STOCK_PREVIEW_LIMIT, LOW_STOCK_THRESHOLD
 from src.config.database import db
 from src.utils.logger import logger
 from src.utils.validators import required_string, positive_number, max_length
@@ -63,6 +66,76 @@ def get_product_by_id(id):
     if not product:
         return None, {'status': 404, 'message': 'Product not found'}
     return product.to_dict(include_category=True), None
+
+
+def get_product_stats():
+    """Dataset-wide inventory aggregates for the admin dashboard.
+
+    Local (products-specific). Returns a plain dict (no error tuple — there is
+    no failure mode other than an infra error, which `@handle_errors` covers).
+
+    Everything is computed by SQL in a **single** query with conditional
+    aggregates; the products are deliberately never loaded into Python. The
+    dashboard used to derive these numbers from one paginated page of products,
+    which is exactly the bug this replaces.
+
+    Definitions:
+    - `lowStockCount` — `stock < LOW_STOCK_THRESHOLD`. This **includes**
+      out-of-stock rows (stock 0 is < 10), matching what the dashboard has
+      always shown; `outOfStockCount` is therefore a subset of it, not a
+      disjoint bucket.
+    - `outOfStockCount` — `stock <= 0`.
+    - `inventoryValue` — `SUM(price * stock)`, rounded to 2 decimals.
+      `SUM` returns NULL on an empty table in SQLite, so it is coalesced to 0.
+    - `lowStockThreshold` is returned in the payload so the frontend renders
+      the same threshold the backend filtered on instead of re-hardcoding it.
+    - `lowStockProducts` — the worst `LOW_STOCK_PREVIEW_LIMIT` offenders for the
+      dashboard's "Low Stock Alert" panel, ordered by stock ASC then name ASC
+      (the name tie-break keeps the list stable across requests). It is a
+      capped *preview*: `lowStockCount` stays the full count, so the panel can
+      honestly render "5 of 7". Always a list, never null.
+
+    Cost: two bounded queries — one aggregate row, plus one `LIMIT`ed select.
+    Only the four fields the panel actually renders (`id`, `name`, `stock`,
+    `price`) are projected, rather than reusing `Product.to_dict()`, so the
+    payload doesn't carry `description` (a Text column) and the rest of the
+    CRUD shape into a dashboard tile. `image` is deliberately NOT projected:
+    the alert panel has no thumbnail slot, so shipping the column would be an
+    unrendered field on the wire that later readers would mistake for a
+    contract the UI honours.
+    """
+    total, low_stock, out_of_stock, inventory_value = db.session.query(
+        func.count(Product.id),
+        func.sum(case((Product.stock < LOW_STOCK_THRESHOLD, 1), else_=0)),
+        func.sum(case((Product.stock <= 0, 1), else_=0)),
+        func.coalesce(func.sum(Product.price * Product.stock), 0.0),
+    ).one()
+
+    low_stock_rows = (
+        db.session.query(Product.id, Product.name, Product.stock,
+                         Product.price)
+        .filter(Product.stock < LOW_STOCK_THRESHOLD)
+        .order_by(Product.stock.asc(), Product.name.asc())
+        .limit(LOW_STOCK_PREVIEW_LIMIT)
+        .all()
+    )
+
+    return {
+        'totalProducts': int(total or 0),
+        'lowStockCount': int(low_stock or 0),
+        'outOfStockCount': int(out_of_stock or 0),
+        'inventoryValue': round(float(inventory_value or 0.0), 2),
+        'lowStockThreshold': LOW_STOCK_THRESHOLD,
+        'lowStockProducts': [
+            {
+                'id': row.id,
+                'name': row.name,
+                'stock': row.stock,
+                'price': row.price,
+            }
+            for row in low_stock_rows
+        ],
+    }
 
 
 def create_product(data, image_file=None, image360_file=None):

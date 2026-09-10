@@ -36,11 +36,18 @@ Server runs at: http://localhost:3000
 ### Products
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/products` | Get all products |
+| GET | `/api/products` | Get all products (paginated) |
 | GET | `/api/products/:id` | Get product by ID |
-| POST | `/api/products` | Create product |
-| PUT | `/api/products/:id` | Update product |
-| DELETE | `/api/products/:id` | Delete product |
+| GET | `/api/products/stats` | Inventory aggregates for the admin dashboard (admin/manager) |
+| POST | `/api/products` | Create product (admin/manager) |
+| PUT | `/api/products/:id` | Update product (admin/manager) |
+| DELETE | `/api/products/:id` | Delete product (admin) |
+
+`GET /api/products/stats` returns `totalProducts`, `lowStockCount`,
+`outOfStockCount`, `inventoryValue`, `lowStockThreshold` and `lowStockProducts`
+(the 5 lowest-stock rows, each `{ id, name, stock, price }` — no `image`: the
+dashboard panel has no thumbnail slot). All of it is computed in SQL over the
+whole catalogue; clients must not re-derive it from a paginated page.
 
 ### Categories
 | Method | Endpoint | Description |
