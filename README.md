@@ -62,12 +62,14 @@ whole catalogue; clients must not re-derive it from a paginated page.
 | POST | `/api/orders` | Create order |
 | PUT | `/api/orders/:id/status` | Update status |
 
-### Users (Admin)
+### Users
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/users` | Get all users |
-| PUT | `/api/users/:id/role` | Update role |
-| DELETE | `/api/users/:id` | Delete user |
+| GET | `/api/users/profile` | Get the logged-in user's own profile |
+| GET | `/api/users` | Get all users (admin, each with `ordersCount` and `totalSpent`) |
+| PUT | `/api/users/:id/role` | Update role (admin) |
+
+There is no `DELETE /api/users/:id` — user deletion is not implemented.
 
 ## 🔐 Test Credentials
 

@@ -16,6 +16,11 @@ ORDER_STATUS = {
 # this matches what the admin dashboard has always displayed.
 LOW_STOCK_THRESHOLD = 10
 
+# Order statuses that count as *realized* revenue. Single home for this
+# definition so the admin dashboard's "Total Revenue" tile and the per-user
+# `totalSpent` column can never drift apart. Pending/cancelled are excluded.
+REVENUE_STATUSES = (ORDER_STATUS['PAID'], ORDER_STATUS['SHIPPED'])
+
 # How many low-stock products the dashboard's "Low Stock Alert" panel previews.
 # The panel shows "<preview> of <lowStockCount>", so this caps the list only —
 # never the count.
