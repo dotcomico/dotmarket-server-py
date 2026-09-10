@@ -20,8 +20,7 @@ Test Users:
 
 import os
 import sys
-from datetime import datetime, timedelta
-import random
+from datetime import datetime, timedelta, timezone
 
 # Add the backend directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -978,18 +977,48 @@ PRODUCTS = [
 # =============================================================================
 USERS = [
     {
-        "username": "AdminTest",
+        "username": "Sarah Chen",
         "email": "admin@test.com",
         "role": "admin"
     },
     {
-        "username": "ManagerTest",
+        "username": "Marcus Webb",
         "email": "manager@test.com",
         "role": "manager"
     },
+    # Primary demo customer — keeps the documented `customer@test.com`
+    # credential (see docs/QUICK_START.md) and owns the bulk of the order
+    # history so `/orders` and the admin tables have a real customer to show.
     {
-        "username": "CustomerTest",
+        "username": "Elena Rodriguez",
         "email": "customer@test.com",
+        "role": "customer"
+    },
+    # Additional customers exist only to populate the admin User/Order tables
+    # (§9 W2) — not documented login credentials, but same Test123! password.
+    {
+        "username": "Priya Patel",
+        "email": "priya.patel@test.com",
+        "role": "customer"
+    },
+    {
+        "username": "James Carter",
+        "email": "james.carter@test.com",
+        "role": "customer"
+    },
+    {
+        "username": "Mia Thompson",
+        "email": "mia.thompson@test.com",
+        "role": "customer"
+    },
+    {
+        "username": "David Kim",
+        "email": "david.kim@test.com",
+        "role": "customer"
+    },
+    {
+        "username": "Olivia Brooks",
+        "email": "olivia.brooks@test.com",
         "role": "customer"
     },
 ]
@@ -1049,14 +1078,20 @@ def clear_database():
     print("✅ Database cleared")
 
 def seed_users():
-    """Create test users with hashed passwords."""
+    """Create test users with hashed passwords.
+
+    `users_map["customer"]` stays the single primary demo customer (backward
+    compatible with anything keying off that), while `users_map["customers"]`
+    is the full ordered list of customer users — seed_orders() spreads orders
+    across all of them instead of piling every order onto one account (§9 W2).
+    """
     print("\n👤 Creating users...")
-    users_map = {}
-    
+    users_map = {"customers": []}
+
     # Hash password using bcrypt (same as your auth_controller)
     salt = bcrypt.gensalt(rounds=10)
     hashed_password = bcrypt.hashpw(PASSWORD.encode('utf-8'), salt).decode('utf-8')
-    
+
     for user_data in USERS:
         user = User(
             username=user_data["username"],
@@ -1066,9 +1101,13 @@ def seed_users():
         )
         db.session.add(user)
         db.session.flush()  # Get the ID
-        users_map[user_data["role"]] = user
-        print(f"   ✅ Created {user_data['role']}: {user_data['email']}")
-    
+        if user_data["role"] == "customer":
+            users_map.setdefault("customer", user)  # first one = primary
+            users_map["customers"].append(user)
+        else:
+            users_map[user_data["role"]] = user
+        print(f"   ✅ Created {user_data['role']}: {user_data['username']} <{user_data['email']}>")
+
     db.session.commit()
     return users_map
 
@@ -1131,160 +1170,104 @@ def seed_products():
     
     return product_list
 
+def _create_order(customer, address, status, days_ago, items):
+    """Local (seed-only) helper. `items` is a list of (product, quantity)
+    tuples. `createdAt`/`updatedAt` are set explicitly (days before "now")
+    instead of the model's `server_default=now()` so seeded orders land on
+    distinct dates spread over the last month rather than all sharing one
+    seed-run timestamp (§9 W1)."""
+    placed_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days_ago)
+    order = Order(
+        totalAmount=0,
+        status=status,
+        address=address,
+        UserId=customer.id,
+        createdAt=placed_at,
+        updatedAt=placed_at,
+    )
+    db.session.add(order)
+    db.session.flush()
+
+    total = 0
+    for product, quantity in items:
+        price = product.price
+        db.session.add(OrderItem(
+            OrderId=order.id,
+            ProductId=product.id,
+            quantity=quantity,
+            priceAtPurchase=price
+        ))
+        total += price * quantity
+    order.totalAmount = round(total, 2)
+    return order
+
+
 def seed_orders(users_map, products):
-    """Create sample orders with various statuses."""
+    """Create sample orders spread across every seeded customer (§9 W2) with
+    createdAt dates spread over the last ~30 days (§9 W1), real addresses
+    matching each customer's own name (§9 W3), and a mix of every status."""
     print("\n🛒 Creating orders...")
-    
-    customer = users_map["customer"]
-    
-    # Helper to get random products
-    available_products = [p for p in products if p.stock > 0]
-    
-    # Order 1: Completed/Shipped order (past)
-    order1 = Order(
-        totalAmount=0,
-        status="shipped",
-        address="John Doe, 123 Main Street\nApt 4B, New York, NY 10001, Phone: 555-0123",
-        UserId=customer.id
-    )
-    db.session.add(order1)
-    db.session.flush()
-    
-    # Add items to order 1
-    order1_items = [
-        {"product": products[0], "quantity": 3},   # Apple
-        {"product": products[1], "quantity": 2},   # Banana
-        {"product": products[6], "quantity": 1},   # Granola
+
+    elena, priya, james, mia, david, olivia = users_map["customers"]
+
+    # (customer, address, status, days_ago, [(product, quantity), ...])
+    orders_spec = [
+        # Elena Rodriguez — primary demo account (customer@test.com), 5 orders
+        (elena, "Elena Rodriguez, 123 Main Street\nApt 4B, New York, NY 10001, Phone: 555-0123",
+         "shipped", 28, [(products[0], 3), (products[1], 2), (products[6], 1)]),
+        (elena, "Elena Rodriguez, 123 Main Street\nApt 4B, New York, NY 10001, Phone: 555-0123",
+         "paid", 21, [(products[11], 1), (products[9], 1), (products[19], 1)]),
+        (elena, "Elena Rodriguez, 123 Main Street\nApt 4B, New York, NY 10001, Phone: 555-0123",
+         "pending", 12, [(products[12], 1), (products[15], 1)]),
+        (elena, "Elena Rodriguez, 456 Oak Avenue\nSuite 100, Los Angeles, CA 90001, Phone: 555-0456",
+         "cancelled", 6, [(products[16], 1)]),
+        (elena, "Elena Rodriguez, 789 Elm Street\nFloor 2, Chicago, IL 60601, Phone: 555-0789",
+         "shipped", 1, [(products[5], 2), (products[7], 3), (products[10], 2)]),
+
+        # Priya Patel — 3 orders
+        (priya, "Priya Patel, 22 Birchwood Lane, Seattle, WA 98101, Phone: 555-0291",
+         "shipped", 25, [(products[3], 2), (products[37], 1)]),
+        (priya, "Priya Patel, 22 Birchwood Lane, Seattle, WA 98101, Phone: 555-0291",
+         "paid", 14, [(products[14], 1), (products[13], 1)]),
+        (priya, "Priya Patel, 22 Birchwood Lane, Seattle, WA 98101, Phone: 555-0291",
+         "pending", 3, [(products[35], 1), (products[30], 1), (products[32], 2)]),
+
+        # James Carter — 2 orders
+        (james, "James Carter, 88 Cedar Ridge Road, Austin, TX 73301, Phone: 555-0345",
+         "paid", 19, [(products[17], 1)]),
+        (james, "James Carter, 88 Cedar Ridge Road, Austin, TX 73301, Phone: 555-0345",
+         "shipped", 5, [(products[25], 2), (products[26], 1), (products[38], 1)]),
+
+        # Mia Thompson — 2 orders
+        (mia, "Mia Thompson, 14 Willow Creek Drive, Denver, CO 80202, Phone: 555-0412",
+         "pending", 16, [(products[61], 5), (products[62], 5)]),
+        (mia, "Mia Thompson, 14 Willow Creek Drive, Denver, CO 80202, Phone: 555-0412",
+         "shipped", 2, [(products[48], 2), (products[49], 1), (products[50], 1)]),
+
+        # David Kim — 2 orders
+        (david, "David Kim, 501 Harbor View Boulevard, Miami, FL 33101, Phone: 555-0567",
+         "paid", 9, [(products[60], 2), (products[58], 1), (products[59], 1)]),
+        (david, "David Kim, 501 Harbor View Boulevard, Miami, FL 33101, Phone: 555-0567",
+         "cancelled", 0, [(products[15], 1), (products[13], 1)]),
+
+        # Olivia Brooks — 1 order
+        (olivia, "Olivia Brooks, 76 Maple Grove Court, Portland, OR 97201, Phone: 555-0678",
+         "shipped", 23, [(products[75], 2), (products[76], 3), (products[77], 2)]),
     ]
-    total1 = 0
-    for item in order1_items:
-        price = item["product"].price
-        oi = OrderItem(
-            OrderId=order1.id,
-            ProductId=item["product"].id,
-            quantity=item["quantity"],
-            priceAtPurchase=price
-        )
-        total1 += price * item["quantity"]
-        db.session.add(oi)
-    order1.totalAmount = round(total1, 2)
-    
-    # Order 2: Paid order (processing)
-    order2 = Order(
-        totalAmount=0,
-        status="paid",
-        address="John Doe, 123 Main Street\nApt 4B, New York, NY 10001, Phone: 555-0123",
-        UserId=customer.id
-    )
-    db.session.add(order2)
-    db.session.flush()
-    
-    order2_items = [
-        {"product": products[11], "quantity": 1},  # Ribeye Steak
-        {"product": products[9], "quantity": 1},   # Olive Oil
-        {"product": products[19], "quantity": 1},  # Salmon
-    ]
-    total2 = 0
-    for item in order2_items:
-        price = item["product"].price
-        oi = OrderItem(
-            OrderId=order2.id,
-            ProductId=item["product"].id,
-            quantity=item["quantity"],
-            priceAtPurchase=price
-        )
-        total2 += price * item["quantity"]
-        db.session.add(oi)
-    order2.totalAmount = round(total2, 2)
-    
-    # Order 3: Pending order (new)
-    order3 = Order(
-        totalAmount=0,
-        status="pending",
-        address="John Doe, 123 Main Street\nApt 4B, New York, NY 10001, Phone: 555-0123",
-        UserId=customer.id
-    )
-    db.session.add(order3)
-    db.session.flush()
-    
-    order3_items = [
-        {"product": products[12], "quantity": 1},  # Smart Hub
-        {"product": products[15], "quantity": 1},  # Earbuds
-    ]
-    total3 = 0
-    for item in order3_items:
-        price = item["product"].price
-        oi = OrderItem(
-            OrderId=order3.id,
-            ProductId=item["product"].id,
-            quantity=item["quantity"],
-            priceAtPurchase=price
-        )
-        total3 += price * item["quantity"]
-        db.session.add(oi)
-    order3.totalAmount = round(total3, 2)
-    
-    # Order 4: Cancelled order
-    order4 = Order(
-        totalAmount=0,
-        status="cancelled",
-        address="John Doe, 456 Oak Avenue\nSuite 100, Los Angeles, CA 90001, Phone: 555-0456",
-        UserId=customer.id
-    )
-    db.session.add(order4)
-    db.session.flush()
-    
-    order4_items = [
-        {"product": products[16], "quantity": 1},  # VR Headset
-    ]
-    total4 = 0
-    for item in order4_items:
-        price = item["product"].price
-        oi = OrderItem(
-            OrderId=order4.id,
-            ProductId=item["product"].id,
-            quantity=item["quantity"],
-            priceAtPurchase=price
-        )
-        total4 += price * item["quantity"]
-        db.session.add(oi)
-    order4.totalAmount = round(total4, 2)
-    
-    # Order 5: Another shipped order (variety)
-    order5 = Order(
-        totalAmount=0,
-        status="shipped",
-        address="John Doe, 789 Elm Street\nFloor 2, Chicago, IL 60601, Phone: 555-0789",
-        UserId=customer.id
-    )
-    db.session.add(order5)
-    db.session.flush()
-    
-    order5_items = [
-        {"product": products[5], "quantity": 2},   # Laundry Detergent
-        {"product": products[7], "quantity": 3},   # Dish Soap
-        {"product": products[10], "quantity": 2},  # Soap Bar
-    ]
-    total5 = 0
-    for item in order5_items:
-        price = item["product"].price
-        oi = OrderItem(
-            OrderId=order5.id,
-            ProductId=item["product"].id,
-            quantity=item["quantity"],
-            priceAtPurchase=price
-        )
-        total5 += price * item["quantity"]
-        db.session.add(oi)
-    order5.totalAmount = round(total5, 2)
-    
+
+    status_counts = {}
+    max_days_ago = 0
+    for customer, address, status, days_ago, items in orders_spec:
+        _create_order(customer, address, status, days_ago, items)
+        status_counts[status] = status_counts.get(status, 0) + 1
+        max_days_ago = max(max_days_ago, days_ago)
+
     db.session.commit()
-    
-    print(f"   ✅ Created 5 orders:")
-    print(f"      - 2 shipped")
-    print(f"      - 1 paid (processing)")
-    print(f"      - 1 pending")
-    print(f"      - 1 cancelled")
+
+    print(f"   ✅ Created {len(orders_spec)} orders across {len(users_map['customers'])} customers, "
+          f"dated over the last {max_days_ago} days:")
+    for status, count in sorted(status_counts.items()):
+        print(f"      - {count} {status}")
 
 def print_summary():
     """Print final summary with login credentials."""
@@ -1310,7 +1293,8 @@ def print_summary():
     print("   • Low stock products: Check Products page for items with stock ≤ 5")
     print("   • Out of stock: At least 1 product with 0 stock")
     print("   • Order statuses: pending, paid, shipped, cancelled")
-    print("   • Customer orders: 5 orders with various items")
+    print("   • Orders: 15 orders across 6 customers, dated over the last ~28 days")
+    print("   • customer@test.com (Elena Rodriguez) owns 5 of them for the /orders demo")
     
     print("\n🚀 Start your server with: python -m src.main")
     print("=" * 60)
